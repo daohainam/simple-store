@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/SimpleStore.Admin/SimpleStore.Admin.csproj" />
     <Project Path="src/SimpleStore.AppHost/SimpleStore.AppHost.csproj" />
     <Project Path="src/SimpleStore.Data/SimpleStore.Data.csproj" />
     <Project Path="src/SimpleStore.ServiceDefaults/SimpleStore.ServiceDefaults.csproj" />

@@ -1,0 +1,91 @@
+@page "/"
+@inject StoreDbContext Db
+
+<PageTitle>Dashboard</PageTitle>
+
+<h1 class="mb-4">Admin Dashboard</h1>
+
+@if (isLoading)
+{
+    <p>Loading metrics...</p>
+}
+else
+{
+    <div class="row g-3 mb-4">
+        <div class="col-md-6 col-xl-3">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Customers</p>
+                    <h3 class="mb-0">@customerCount</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-xl-3">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Categories</p>
+                    <h3 class="mb-0">@categoryCount</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-xl-3">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Products</p>
+                    <h3 class="mb-0">@productCount</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 col-xl-3">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Orders</p>
+                    <h3 class="mb-0">@orderCount</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0">
+        <div class="card-body">
+            <h5 class="card-title">Sales Snapshot</h5>
+            <div class="row">
+                <div class="col-md-4">
+                    <p class="text-muted mb-1">Pending</p>
+                    <p class="fw-semibold">@pendingOrders</p>
+                </div>
+                <div class="col-md-4">
+                    <p class="text-muted mb-1">Completed</p>
+                    <p class="fw-semibold">@completedOrders</p>
+                </div>
+                <div class="col-md-4">
+                    <p class="text-muted mb-1">Total Revenue</p>
+                    <p class="fw-semibold">@totalRevenue.ToString("C")</p>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = true;
+    private int customerCount;
+    private int categoryCount;
+    private int productCount;
+    private int orderCount;
+    private int pendingOrders;
+    private int completedOrders;
+    private decimal totalRevenue;
+
+    protected override async Task OnInitializedAsync()
+    {
+        customerCount = await Db.Users.CountAsync();
+        categoryCount = await Db.Categories.CountAsync();
+        productCount = await Db.Products.CountAsync();
+        orderCount = await Db.Orders.CountAsync();
+        pendingOrders = await Db.Orders.CountAsync(o => o.Status == "Pending");
+        completedOrders = await Db.Orders.CountAsync(o => o.Status == "Delivered");
+        totalRevenue = await Db.Orders.SumAsync(o => (decimal?)o.TotalAmount) ?? 0m;
+        isLoading = false;
+    }
+}

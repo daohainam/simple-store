@@ -1,0 +1,151 @@
+@page "/customers"
+@inject StoreDbContext Db
+
+<PageTitle>Customers</PageTitle>
+
+<h1 class="mb-4">Customers</h1>
+
+@if (!string.IsNullOrWhiteSpace(message))
+{
+    <div class="alert alert-info" role="alert">@message</div>
+}
+
+@if (isLoading)
+{
+    <p>Loading customers...</p>
+}
+else
+{
+    <div class="card shadow-sm border-0">
+        <div class="card-body table-responsive">
+            <table class="table align-middle">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>Orders</th>
+                        <th>Status</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var customer in customers)
+                    {
+                        <tr>
+                            <td>
+                                <InputText class="form-control form-control-sm" @bind-Value="customer.FullName" />
+                            </td>
+                            <td>@customer.Email</td>
+                            <td>@customer.PhoneNumber</td>
+                            <td>@customer.OrderCount</td>
+                            <td>
+                                @if (customer.IsLocked)
+                                {
+                                    <span class="badge text-bg-danger">Locked</span>
+                                }
+                                else
+                                {
+                                    <span class="badge text-bg-success">Active</span>
+                                }
+                            </td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-primary me-2" @onclick="() => SaveCustomerAsync(customer)">Save</button>
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => ToggleLockAsync(customer)">
+                                    @(customer.IsLocked ? "Unlock" : "Lock")
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    private readonly List<CustomerRow> customers = [];
+    private bool isLoading = true;
+    private string? message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        customers.Clear();
+
+        var orderCounts = await Db.Orders
+            .GroupBy(o => o.UserId)
+            .Select(g => new { UserId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.UserId, x => x.Count);
+
+        var users = await Db.Users
+            .OrderBy(u => u.Email)
+            .ToListAsync();
+
+        foreach (var user in users)
+        {
+            customers.Add(new CustomerRow
+            {
+                Id = user.Id,
+                FullName = user.FullName,
+                Email = user.Email ?? string.Empty,
+                PhoneNumber = user.PhoneNumber ?? string.Empty,
+                IsLocked = user.LockoutEnd.HasValue && user.LockoutEnd > DateTimeOffset.UtcNow,
+                OrderCount = orderCounts.GetValueOrDefault(user.Id)
+            });
+        }
+
+        isLoading = false;
+    }
+
+    private async Task SaveCustomerAsync(CustomerRow row)
+    {
+        var user = await Db.Users.FirstOrDefaultAsync(x => x.Id == row.Id);
+        if (user is null)
+        {
+            return;
+        }
+
+        user.FullName = row.FullName.Trim();
+        await Db.SaveChangesAsync();
+        message = $"Updated {row.Email}.";
+    }
+
+    private async Task ToggleLockAsync(CustomerRow row)
+    {
+        var user = await Db.Users.FirstOrDefaultAsync(x => x.Id == row.Id);
+        if (user is null)
+        {
+            return;
+        }
+
+        if (row.IsLocked)
+        {
+            user.LockoutEnd = null;
+            row.IsLocked = false;
+            message = $"Unlocked {row.Email}.";
+        }
+        else
+        {
+            user.LockoutEnd = DateTimeOffset.UtcNow.AddYears(100);
+            row.IsLocked = true;
+            message = $"Locked {row.Email}.";
+        }
+
+        await Db.SaveChangesAsync();
+    }
+
+    private sealed class CustomerRow
+    {
+        public string Id { get; set; } = string.Empty;
+        public string FullName { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string PhoneNumber { get; set; } = string.Empty;
+        public bool IsLocked { get; set; }
+        public int OrderCount { get; set; }
+    }
+}
