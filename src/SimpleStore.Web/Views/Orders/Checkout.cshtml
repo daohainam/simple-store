@@ -1,0 +1,70 @@
+@model SimpleStore.Web.ViewModels.CheckoutViewModel
+@{
+    ViewData["Title"] = "Checkout";
+}
+<div class="container py-4">
+    <h1 class="mb-4"><i class="bi bi-credit-card me-2"></i>Checkout</h1>
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <div class="card shadow-sm">
+                <div class="card-header"><h5 class="mb-0"><i class="bi bi-geo-alt me-2"></i>Shipping Information</h5></div>
+                <div class="card-body">
+                    <form asp-action="Checkout" method="post">
+                        @Html.AntiForgeryToken()
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label asp-for="FullName" class="form-label"></label>
+                                <input asp-for="FullName" class="form-control" />
+                                <span asp-validation-for="FullName" class="text-danger"></span>
+                            </div>
+                            <div class="col-md-6">
+                                <label asp-for="Email" class="form-label"></label>
+                                <input asp-for="Email" class="form-control" />
+                                <span asp-validation-for="Email" class="text-danger"></span>
+                            </div>
+                            <div class="col-12">
+                                <label asp-for="ShippingAddress" class="form-label"></label>
+                                <input asp-for="ShippingAddress" class="form-control" />
+                                <span asp-validation-for="ShippingAddress" class="text-danger"></span>
+                            </div>
+                            <div class="col-md-6">
+                                <label asp-for="City" class="form-label"></label>
+                                <input asp-for="City" class="form-control" />
+                                <span asp-validation-for="City" class="text-danger"></span>
+                            </div>
+                            <div class="col-md-6">
+                                <label asp-for="PostalCode" class="form-label"></label>
+                                <input asp-for="PostalCode" class="form-control" />
+                                <span asp-validation-for="PostalCode" class="text-danger"></span>
+                            </div>
+                        </div>
+                        <hr class="my-4" />
+                        <button type="submit" class="btn btn-primary btn-lg w-100">
+                            <i class="bi bi-check-circle me-2"></i>Place Order - $@Model.Total.ToString("N2")
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white"><h5 class="mb-0">Order Summary</h5></div>
+                <div class="card-body">
+                    @foreach (var item in Model.CartItems)
+                    {
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>@item.ProductName <span class="text-muted">x@item.Quantity</span></span>
+                            <strong>$@item.TotalPrice.ToString("N2")</strong>
+                        </div>
+                    }
+                    <hr />
+                    <div class="d-flex justify-content-between">
+                        <strong class="fs-5">Total</strong>
+                        <strong class="fs-5 text-primary">$@Model.Total.ToString("N2")</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+@section Scripts { @{await Html.RenderPartialAsync("_ValidationScriptsPartial");} }

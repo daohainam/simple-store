@@ -1,0 +1,11 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<Project ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ImportGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
+    <Import Project="$(NuGetPackageRoot)microsoft.extensions.telemetry.abstractions/9.6.0/buildTransitive/net8.0/Microsoft.Extensions.Telemetry.Abstractions.targets" Condition="Exists('$(NuGetPackageRoot)microsoft.extensions.telemetry.abstractions/9.6.0/buildTransitive/net8.0/Microsoft.Extensions.Telemetry.Abstractions.targets')" />
+    <Import Project="$(NuGetPackageRoot)microsoft.extensions.http.resilience/9.6.0/buildTransitive/net8.0/Microsoft.Extensions.Http.Resilience.targets" Condition="Exists('$(NuGetPackageRoot)microsoft.extensions.http.resilience/9.6.0/buildTransitive/net8.0/Microsoft.Extensions.Http.Resilience.targets')" />
+    <Import Project="$(NuGetPackageRoot)mono.texttemplating/3.0.0/buildTransitive/Mono.TextTemplating.targets" Condition="Exists('$(NuGetPackageRoot)mono.texttemplating/3.0.0/buildTransitive/Mono.TextTemplating.targets')" />
+    <Import Project="$(NuGetPackageRoot)microsoft.codeanalysis.analyzers/3.3.4/buildTransitive/Microsoft.CodeAnalysis.Analyzers.targets" Condition="Exists('$(NuGetPackageRoot)microsoft.codeanalysis.analyzers/3.3.4/buildTransitive/Microsoft.CodeAnalysis.Analyzers.targets')" />
+    <Import Project="$(NuGetPackageRoot)microsoft.aspnetcore.identity.ui/9.0.4/buildTransitive/Microsoft.AspNetCore.Identity.UI.targets" Condition="Exists('$(NuGetPackageRoot)microsoft.aspnetcore.identity.ui/9.0.4/buildTransitive/Microsoft.AspNetCore.Identity.UI.targets')" />
+    <Import Project="$(NuGetPackageRoot)aspire.npgsql.entityframeworkcore.postgresql/9.3.1/buildTransitive/net9.0/Aspire.Npgsql.EntityFrameworkCore.PostgreSQL.targets" Condition="Exists('$(NuGetPackageRoot)aspire.npgsql.entityframeworkcore.postgresql/9.3.1/buildTransitive/net9.0/Aspire.Npgsql.EntityFrameworkCore.PostgreSQL.targets')" />
+  </ImportGroup>
+</Project>

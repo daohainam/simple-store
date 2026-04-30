@@ -1,0 +1,59 @@
+@model SimpleStore.Data.Models.Order
+@{
+    ViewData["Title"] = $"Order #{Model.Id}";
+}
+<div class="container py-4">
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a asp-action="Index">My Orders</a></li>
+            <li class="breadcrumb-item active">Order #@Model.Id</li>
+        </ol>
+    </nav>
+    <div class="row g-4">
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-list-ul me-2"></i>Order Items</h5>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table mb-0">
+                        <thead class="table-light">
+                            <tr><th>Product</th><th>Qty</th><th>Price</th><th>Subtotal</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in Model.Items)
+                            {
+                                <tr class="align-middle">
+                                    <td>@item.Product.Name</td>
+                                    <td>@item.Quantity</td>
+                                    <td>$@item.UnitPrice.ToString("N2")</td>
+                                    <td><strong>$@((item.UnitPrice * item.Quantity).ToString("N2"))</strong></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white"><h5 class="mb-0">Order Details</h5></div>
+                <div class="card-body">
+                    <p><strong>Order #:</strong> @Model.Id</p>
+                    <p><strong>Date:</strong> @Model.OrderDate.ToString("MMMM dd, yyyy HH:mm")</p>
+                    <p><strong>Status:</strong> <span class="badge bg-warning text-dark">@Model.Status</span></p>
+                    <p><strong>Shipping Address:</strong></p>
+                    <p class="text-muted">@Model.ShippingAddress</p>
+                    <hr />
+                    <div class="d-flex justify-content-between">
+                        <strong class="fs-5">Total</strong>
+                        <strong class="fs-5 text-primary">$@Model.TotalAmount.ToString("N2")</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <a asp-action="Index" class="btn btn-outline-secondary mt-3">
+        <i class="bi bi-arrow-left me-2"></i>Back to Orders
+    </a>
+</div>

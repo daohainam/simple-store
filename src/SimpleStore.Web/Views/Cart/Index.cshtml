@@ -1,0 +1,110 @@
+@model List<SimpleStore.Web.Services.CartItem>
+@{
+    ViewData["Title"] = "Shopping Cart";
+    var total = Model.Sum(i => i.TotalPrice);
+}
+<div class="container py-4">
+    <h1 class="mb-4"><i class="bi bi-cart3 me-2"></i>Shopping Cart</h1>
+    @if (!Model.Any())
+    {
+        <div class="text-center py-5">
+            <i class="bi bi-cart-x display-1 text-muted"></i>
+            <h3 class="mt-3">Your cart is empty</h3>
+            <p class="text-muted">Add some products to get started!</p>
+            <a asp-controller="Catalog" asp-action="Index" class="btn btn-primary mt-2">
+                <i class="bi bi-grid me-2"></i>Browse Catalog
+            </a>
+        </div>
+    }
+    else
+    {
+        <div class="row g-4">
+            <div class="col-lg-8">
+                <div class="card shadow-sm">
+                    <div class="card-body p-0">
+                        <table class="table mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Product</th>
+                                    <th>Price</th>
+                                    <th>Quantity</th>
+                                    <th>Subtotal</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in Model)
+                                {
+                                    <tr class="align-middle">
+                                        <td>
+                                            <div class="d-flex align-items-center gap-3">
+                                                <div class="bg-light rounded d-flex align-items-center justify-content-center" style="width:60px;height:60px;">
+                                                    <i class="bi bi-box-seam fs-3 text-secondary"></i>
+                                                </div>
+                                                <strong>@item.ProductName</strong>
+                                            </div>
+                                        </td>
+                                        <td>$@item.UnitPrice.ToString("N2")</td>
+                                        <td>
+                                            <form asp-controller="Cart" asp-action="Update" method="post" class="d-inline-flex gap-1">
+                                                <input type="hidden" name="productId" value="@item.ProductId" />
+                                                <input type="number" name="quantity" value="@item.Quantity" min="1" class="form-control form-control-sm" style="width:70px;" />
+                                                <button type="submit" class="btn btn-sm btn-outline-secondary">
+                                                    <i class="bi bi-arrow-repeat"></i>
+                                                </button>
+                                            </form>
+                                        </td>
+                                        <td><strong>$@item.TotalPrice.ToString("N2")</strong></td>
+                                        <td>
+                                            <form asp-controller="Cart" asp-action="Remove" method="post">
+                                                <input type="hidden" name="productId" value="@item.ProductId" />
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-primary text-white"><h5 class="mb-0">Order Summary</h5></div>
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Subtotal (@Model.Sum(i => i.Quantity) items)</span>
+                            <strong>$@total.ToString("N2")</strong>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Shipping</span>
+                            <span class="text-success">Free</span>
+                        </div>
+                        <hr />
+                        <div class="d-flex justify-content-between mb-3">
+                            <strong class="fs-5">Total</strong>
+                            <strong class="fs-5 text-primary">$@total.ToString("N2")</strong>
+                        </div>
+                        @if (User.Identity?.IsAuthenticated == true)
+                        {
+                            <a asp-controller="Orders" asp-action="Checkout" class="btn btn-primary btn-lg w-100">
+                                <i class="bi bi-credit-card me-2"></i>Proceed to Checkout
+                            </a>
+                        }
+                        else
+                        {
+                            <a asp-area="Identity" asp-page="/Account/Login" asp-route-returnUrl="/Orders/Checkout" class="btn btn-primary btn-lg w-100">
+                                <i class="bi bi-box-arrow-in-right me-2"></i>Sign In to Checkout
+                            </a>
+                        }
+                        <a asp-controller="Catalog" asp-action="Index" class="btn btn-outline-secondary w-100 mt-2">
+                            <i class="bi bi-arrow-left me-2"></i>Continue Shopping
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>

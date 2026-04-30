@@ -1,0 +1,14 @@
+.product-card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    border: none;
+}
+.product-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.15) !important;
+}
+.navbar-brand {
+    font-size: 1.5rem;
+}
+.hero-section {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
