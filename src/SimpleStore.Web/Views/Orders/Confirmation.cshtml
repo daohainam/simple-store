@@ -1,0 +1,45 @@
+@model SimpleStore.Data.Models.Order
+@{
+    ViewData["Title"] = "Order Confirmed";
+}
+<div class="container py-5">
+    <div class="text-center mb-5">
+        <div class="text-success mb-3">
+            <i class="bi bi-check-circle-fill" style="font-size:5rem;"></i>
+        </div>
+        <h1 class="display-5">Order Confirmed!</h1>
+        <p class="lead text-muted">Thank you! Your order #@Model.Id has been placed successfully.</p>
+        <p class="text-muted">We'll process your order soon.</p>
+    </div>
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-success text-white"><h5 class="mb-0">Order #@Model.Id Summary</h5></div>
+                <div class="card-body">
+                    @foreach (var item in Model.Items)
+                    {
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>@item.Product.Name x@item.Quantity</span>
+                            <strong>$@((item.UnitPrice * item.Quantity).ToString("N2"))</strong>
+                        </div>
+                    }
+                    <hr />
+                    <div class="d-flex justify-content-between">
+                        <strong>Total</strong>
+                        <strong class="text-primary">$@Model.TotalAmount.ToString("N2")</strong>
+                    </div>
+                    <hr />
+                    <p><strong>Shipping to:</strong> @Model.ShippingAddress</p>
+                </div>
+            </div>
+            <div class="d-flex gap-3 justify-content-center mt-4">
+                <a asp-action="Index" class="btn btn-outline-primary btn-lg">
+                    <i class="bi bi-bag me-2"></i>View All Orders
+                </a>
+                <a asp-controller="Catalog" asp-action="Index" class="btn btn-primary btn-lg">
+                    <i class="bi bi-grid me-2"></i>Continue Shopping
+                </a>
+            </div>
+        </div>
+    </div>
+</div>

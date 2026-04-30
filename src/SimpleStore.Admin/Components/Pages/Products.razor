@@ -1,0 +1,246 @@
+@page "/products"
+@inject StoreDbContext Db
+
+<PageTitle>Products</PageTitle>
+
+<h1 class="mb-4">Products</h1>
+
+@if (!string.IsNullOrWhiteSpace(message))
+{
+    <div class="alert alert-info" role="alert">@message</div>
+}
+
+<div class="row g-3">
+    <div class="col-xl-4">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <h5 class="card-title">@(editingId is null ? "Create Product" : "Edit Product")</h5>
+
+                <div class="mb-3">
+                    <label class="form-label">Name</label>
+                    <InputText class="form-control" @bind-Value="form.Name" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Category</label>
+                    <InputSelect class="form-select" @bind-Value="form.CategoryId">
+                        <option value="0">Select category</option>
+                        @foreach (var category in categories)
+                        {
+                            <option value="@category.Id">@category.Name</option>
+                        }
+                    </InputSelect>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Description</label>
+                    <InputTextArea class="form-control" rows="3" @bind-Value="form.Description" />
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label class="form-label">Price</label>
+                        <InputNumber class="form-control" @bind-Value="form.Price" />
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Stock</label>
+                        <InputNumber class="form-control" @bind-Value="form.Stock" />
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Image URL</label>
+                    <InputText class="form-control" @bind-Value="form.ImageUrl" />
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button class="btn btn-primary" @onclick="SaveAsync">Save</button>
+                    @if (editingId is not null)
+                    {
+                        <button class="btn btn-outline-secondary" @onclick="ResetForm">Cancel</button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-8">
+        <div class="card shadow-sm border-0">
+            <div class="card-body table-responsive">
+                <table class="table align-middle">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Category</th>
+                            <th>Price</th>
+                            <th>Stock</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var product in products)
+                        {
+                            <tr>
+                                <td>@product.Name</td>
+                                <td>@product.CategoryName</td>
+                                <td>@product.Price.ToString("C")</td>
+                                <td>@product.Stock</td>
+                                <td class="text-end">
+                                    <button class="btn btn-sm btn-outline-primary me-2" @onclick="() => Edit(product)">Edit</button>
+                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(product.Id)">Delete</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private readonly List<ProductRow> products = [];
+    private readonly List<CategoryOption> categories = [];
+    private readonly ProductForm form = new() { ImageUrl = "/images/products/placeholder.jpg" };
+    private int? editingId;
+    private string? message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCategoriesAsync();
+        await LoadProductsAsync();
+    }
+
+    private async Task LoadCategoriesAsync()
+    {
+        categories.Clear();
+        categories.AddRange(await Db.Categories
+            .AsNoTracking()
+            .OrderBy(c => c.Name)
+            .Select(c => new CategoryOption { Id = c.Id, Name = c.Name })
+            .ToListAsync());
+    }
+
+    private async Task LoadProductsAsync()
+    {
+        products.Clear();
+        products.AddRange(await Db.Products
+            .AsNoTracking()
+            .Include(p => p.Category)
+            .OrderBy(p => p.Name)
+            .Select(p => new ProductRow
+            {
+                Id = p.Id,
+                Name = p.Name,
+                Description = p.Description,
+                Price = p.Price,
+                Stock = p.Stock,
+                ImageUrl = p.ImageUrl,
+                CategoryId = p.CategoryId,
+                CategoryName = p.Category.Name
+            })
+            .ToListAsync());
+    }
+
+    private void Edit(ProductRow row)
+    {
+        editingId = row.Id;
+        form.Name = row.Name;
+        form.Description = row.Description;
+        form.Price = row.Price;
+        form.Stock = row.Stock;
+        form.ImageUrl = row.ImageUrl;
+        form.CategoryId = row.CategoryId;
+        message = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(form.Name) || form.CategoryId <= 0)
+        {
+            message = "Product name and category are required.";
+            return;
+        }
+
+        if (editingId is null)
+        {
+            Db.Products.Add(new Product
+            {
+                Name = form.Name.Trim(),
+                Description = form.Description.Trim(),
+                Price = form.Price,
+                Stock = form.Stock,
+                ImageUrl = string.IsNullOrWhiteSpace(form.ImageUrl) ? "/images/products/placeholder.jpg" : form.ImageUrl.Trim(),
+                CategoryId = form.CategoryId
+            });
+            message = "Product created.";
+        }
+        else
+        {
+            var product = await Db.Products.FirstOrDefaultAsync(p => p.Id == editingId.Value);
+            if (product is null)
+            {
+                return;
+            }
+
+            product.Name = form.Name.Trim();
+            product.Description = form.Description.Trim();
+            product.Price = form.Price;
+            product.Stock = form.Stock;
+            product.ImageUrl = string.IsNullOrWhiteSpace(form.ImageUrl) ? "/images/products/placeholder.jpg" : form.ImageUrl.Trim();
+            product.CategoryId = form.CategoryId;
+            message = "Product updated.";
+        }
+
+        await Db.SaveChangesAsync();
+        await LoadProductsAsync();
+        ResetForm();
+    }
+
+    private async Task DeleteAsync(int id)
+    {
+        var product = await Db.Products.FirstOrDefaultAsync(p => p.Id == id);
+        if (product is null)
+        {
+            return;
+        }
+
+        Db.Products.Remove(product);
+        await Db.SaveChangesAsync();
+        message = "Product deleted.";
+        await LoadProductsAsync();
+    }
+
+    private void ResetForm()
+    {
+        editingId = null;
+        form.Name = string.Empty;
+        form.Description = string.Empty;
+        form.Price = 0m;
+        form.Stock = 0;
+        form.ImageUrl = "/images/products/placeholder.jpg";
+        form.CategoryId = 0;
+    }
+
+    private class ProductForm
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public decimal Price { get; set; }
+        public int Stock { get; set; }
+        public string ImageUrl { get; set; } = string.Empty;
+        public int CategoryId { get; set; }
+    }
+
+    private sealed class ProductRow : ProductForm
+    {
+        public int Id { get; set; }
+        public string CategoryName { get; set; } = string.Empty;
+    }
+
+    private sealed class CategoryOption
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+    }
+}

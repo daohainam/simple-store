@@ -1,0 +1,180 @@
+@page "/categories"
+@inject StoreDbContext Db
+
+<PageTitle>Categories</PageTitle>
+
+<h1 class="mb-4">Categories</h1>
+
+@if (!string.IsNullOrWhiteSpace(message))
+{
+    <div class="alert alert-info" role="alert">@message</div>
+}
+
+<div class="row g-3">
+    <div class="col-lg-4">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <h5 class="card-title">@(editingId is null ? "Create Category" : "Edit Category")</h5>
+                <div class="mb-3">
+                    <label class="form-label">Name</label>
+                    <InputText class="form-control" @bind-Value="form.Name" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Description</label>
+                    <InputTextArea class="form-control" rows="4" @bind-Value="form.Description" />
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-primary" @onclick="SaveAsync">Save</button>
+                    @if (editingId is not null)
+                    {
+                        <button class="btn btn-outline-secondary" @onclick="ResetForm">Cancel</button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <div class="card shadow-sm border-0">
+            <div class="card-body table-responsive">
+                <table class="table align-middle">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Description</th>
+                            <th>Products</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var category in categories)
+                        {
+                            <tr>
+                                <td>@category.Name</td>
+                                <td>@category.Description</td>
+                                <td>@category.ProductCount</td>
+                                <td class="text-end">
+                                    <button class="btn btn-sm btn-outline-primary me-2" @onclick="() => Edit(category)">Edit</button>
+                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteAsync(category.Id)" disabled="@(category.ProductCount > 0)">Delete</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+                <small class="text-muted">Delete is disabled when the category still has products.</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private readonly List<CategoryRow> categories = [];
+    private readonly CategoryForm form = new();
+    private int? editingId;
+    private string? message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        categories.Clear();
+
+        var data = await Db.Categories
+            .AsNoTracking()
+            .Select(c => new CategoryRow
+            {
+                Id = c.Id,
+                Name = c.Name,
+                Description = c.Description,
+                ProductCount = c.Products.Count
+            })
+            .OrderBy(c => c.Name)
+            .ToListAsync();
+
+        categories.AddRange(data);
+    }
+
+    private void Edit(CategoryRow row)
+    {
+        editingId = row.Id;
+        form.Name = row.Name;
+        form.Description = row.Description;
+        message = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(form.Name))
+        {
+            message = "Category name is required.";
+            return;
+        }
+
+        if (editingId is null)
+        {
+            Db.Categories.Add(new Category
+            {
+                Name = form.Name.Trim(),
+                Description = form.Description.Trim()
+            });
+            message = "Category created.";
+        }
+        else
+        {
+            var category = await Db.Categories.FirstOrDefaultAsync(c => c.Id == editingId.Value);
+            if (category is null)
+            {
+                return;
+            }
+
+            category.Name = form.Name.Trim();
+            category.Description = form.Description.Trim();
+            message = "Category updated.";
+        }
+
+        await Db.SaveChangesAsync();
+        await LoadAsync();
+        ResetForm();
+    }
+
+    private async Task DeleteAsync(int id)
+    {
+        var category = await Db.Categories
+            .Include(c => c.Products)
+            .FirstOrDefaultAsync(c => c.Id == id);
+
+        if (category is null || category.Products.Count > 0)
+        {
+            return;
+        }
+
+        Db.Categories.Remove(category);
+        await Db.SaveChangesAsync();
+        message = "Category deleted.";
+        await LoadAsync();
+    }
+
+    private void ResetForm()
+    {
+        editingId = null;
+        form.Name = string.Empty;
+        form.Description = string.Empty;
+    }
+
+    private sealed class CategoryForm
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+    }
+
+    private sealed class CategoryRow
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public int ProductCount { get; set; }
+    }
+}

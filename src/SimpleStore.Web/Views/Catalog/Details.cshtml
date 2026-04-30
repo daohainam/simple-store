@@ -1,0 +1,43 @@
+@model SimpleStore.Data.Models.Product
+@{
+    ViewData["Title"] = Model.Name;
+}
+<div class="container py-4">
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a asp-controller="Catalog" asp-action="Index">Catalog</a></li>
+            <li class="breadcrumb-item"><a asp-controller="Catalog" asp-action="Index" asp-route-categoryId="@Model.CategoryId">@Model.Category.Name</a></li>
+            <li class="breadcrumb-item active">@Model.Name</li>
+        </ol>
+    </nav>
+    <div class="row g-4">
+        <div class="col-md-5">
+            <div class="card shadow-sm">
+                <div class="card-body d-flex align-items-center justify-content-center bg-light" style="height:400px;">
+                    <i class="bi bi-box-seam" style="font-size:8rem; color:#adb5bd;"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-7">
+            <span class="badge bg-secondary mb-2">@Model.Category.Name</span>
+            <h1 class="mb-3">@Model.Name</h1>
+            <p class="lead text-muted">@Model.Description</p>
+            <div class="fs-2 fw-bold text-primary mb-3">$@Model.Price.ToString("N2")</div>
+            <p class="text-muted"><i class="bi bi-check-circle-fill text-success me-2"></i>@Model.Stock items in stock</p>
+            <hr />
+            <form asp-controller="Cart" asp-action="Add" method="post" class="d-flex gap-3 align-items-center">
+                <input type="hidden" name="productId" value="@Model.Id" />
+                <div class="input-group" style="width:120px;">
+                    <span class="input-group-text">Qty</span>
+                    <input type="number" name="quantity" value="1" min="1" max="@Model.Stock" class="form-control" />
+                </div>
+                <button type="submit" class="btn btn-primary btn-lg flex-grow-1">
+                    <i class="bi bi-cart-plus me-2"></i>Add to Cart
+                </button>
+            </form>
+            <a asp-controller="Catalog" asp-action="Index" class="btn btn-outline-secondary mt-3">
+                <i class="bi bi-arrow-left me-2"></i>Back to Catalog
+            </a>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,55 @@
+@model IEnumerable<SimpleStore.Data.Models.Order>
+@{
+    ViewData["Title"] = "My Orders";
+}
+<div class="container py-4">
+    <h1 class="mb-4"><i class="bi bi-bag me-2"></i>My Orders</h1>
+    @if (!Model.Any())
+    {
+        <div class="text-center py-5">
+            <i class="bi bi-bag-x display-1 text-muted"></i>
+            <h3 class="mt-3">No orders yet</h3>
+            <a asp-controller="Catalog" asp-action="Index" class="btn btn-primary mt-2">Start Shopping</a>
+        </div>
+    }
+    else
+    {
+        <div class="card shadow-sm">
+            <div class="card-body p-0">
+                <table class="table mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Order #</th>
+                            <th>Date</th>
+                            <th>Items</th>
+                            <th>Total</th>
+                            <th>Status</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var order in Model)
+                        {
+                            <tr class="align-middle">
+                                <td><strong>#@order.Id</strong></td>
+                                <td>@order.OrderDate.ToString("MMM dd, yyyy")</td>
+                                <td>@order.Items.Count item(s)</td>
+                                <td><strong>$@order.TotalAmount.ToString("N2")</strong></td>
+                                <td>
+                                    <span class="badge @(order.Status == "Pending" ? "bg-warning text-dark" : "bg-success")">
+                                        @order.Status
+                                    </span>
+                                </td>
+                                <td>
+                                    <a asp-action="Details" asp-route-id="@order.Id" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-eye me-1"></i>View
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>

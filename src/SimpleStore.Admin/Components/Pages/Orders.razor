@@ -1,0 +1,136 @@
+@page "/orders"
+@inject StoreDbContext Db
+
+<PageTitle>Orders</PageTitle>
+
+<h1 class="mb-4">Orders</h1>
+
+@if (!string.IsNullOrWhiteSpace(message))
+{
+    <div class="alert alert-info" role="alert">@message</div>
+}
+
+@if (isLoading)
+{
+    <p>Loading orders...</p>
+}
+else
+{
+    <div class="card shadow-sm border-0">
+        <div class="card-body table-responsive">
+            <table class="table align-middle">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Customer</th>
+                        <th>Date</th>
+                        <th>Items</th>
+                        <th>Total</th>
+                        <th>Status</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var order in orders)
+                    {
+                        <tr>
+                            <td>@order.Id</td>
+                            <td>@order.CustomerLabel</td>
+                            <td>@order.OrderDate.ToString("yyyy-MM-dd HH:mm")</td>
+                            <td>@order.ItemCount</td>
+                            <td>@order.TotalAmount.ToString("C")</td>
+                            <td>
+                                <InputSelect class="form-select form-select-sm" @bind-Value="order.Status">
+                                    @foreach (var status in statuses)
+                                    {
+                                        <option value="@status">@status</option>
+                                    }
+                                </InputSelect>
+                            </td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-primary" @onclick="() => SaveStatusAsync(order)">Update</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td></td>
+                            <td colspan="6" class="text-muted small">
+                                <strong>Shipping:</strong> @order.ShippingAddress
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    private static readonly string[] statuses = ["Pending", "Processing", "Shipped", "Delivered", "Cancelled"];
+
+    private readonly List<OrderRow> orders = [];
+    private bool isLoading = true;
+    private string? message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        orders.Clear();
+
+        var users = await Db.Users
+            .AsNoTracking()
+            .ToDictionaryAsync(u => u.Id, u => string.IsNullOrWhiteSpace(u.FullName) ? (u.Email ?? u.Id) : u.FullName);
+
+        var rows = await Db.Orders
+            .AsNoTracking()
+            .Include(o => o.Items)
+            .OrderByDescending(o => o.OrderDate)
+            .Select(o => new OrderRow
+            {
+                Id = o.Id,
+                UserId = o.UserId,
+                OrderDate = o.OrderDate,
+                ItemCount = o.Items.Sum(i => i.Quantity),
+                TotalAmount = o.TotalAmount,
+                ShippingAddress = o.ShippingAddress,
+                Status = o.Status
+            })
+            .ToListAsync();
+
+        foreach (var row in rows)
+        {
+            row.CustomerLabel = users.GetValueOrDefault(row.UserId, row.UserId);
+            orders.Add(row);
+        }
+
+        isLoading = false;
+    }
+
+    private async Task SaveStatusAsync(OrderRow row)
+    {
+        var order = await Db.Orders.FirstOrDefaultAsync(o => o.Id == row.Id);
+        if (order is null)
+        {
+            return;
+        }
+
+        order.Status = row.Status;
+        await Db.SaveChangesAsync();
+        message = $"Order #{row.Id} updated to {row.Status}.";
+    }
+
+    private sealed class OrderRow
+    {
+        public int Id { get; set; }
+        public string UserId { get; set; } = string.Empty;
+        public string CustomerLabel { get; set; } = string.Empty;
+        public DateTime OrderDate { get; set; }
+        public int ItemCount { get; set; }
+        public decimal TotalAmount { get; set; }
+        public string ShippingAddress { get; set; } = string.Empty;
+        public string Status { get; set; } = "Pending";
+    }
+}
