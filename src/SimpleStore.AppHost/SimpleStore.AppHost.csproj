@@ -1,18 +1,20 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <Sdk Name="Aspire.AppHost.Sdk" Version="13.2.4" />
+<Project Sdk="Aspire.AppHost.Sdk/13.3.0">
+
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
-    <IsAspireHost>true</IsAspireHost>
-    <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UserSecretsId>b5c89135-91aa-4ea0-a4d9-166047df4187</UserSecretsId>
   </PropertyGroup>
+
   <ItemGroup>
-    <PackageReference Include="Aspire.Hosting.AppHost" Version="13.2.4" />
-    <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.2.4" />
+    <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.3.0" />
   </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\SimpleStore.Admin\SimpleStore.Admin.csproj" />
     <ProjectReference Include="..\SimpleStore.Web\SimpleStore.Web.csproj" />
   </ItemGroup>
+
 </Project>
