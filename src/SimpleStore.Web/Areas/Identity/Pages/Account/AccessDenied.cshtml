@@ -1,0 +1,13 @@
+@page
+@model AccessDeniedModel
+@{
+    ViewData["Title"] = "Access denied";
+}
+
+<div class="container py-5 text-center">
+    <h1 class="h3 mb-3 text-danger"><i class="bi bi-shield-lock me-2"></i>Access denied</h1>
+    <p class="text-muted">You do not have permission to view this page.</p>
+    <a class="btn btn-primary" asp-controller="Catalog" asp-action="Index">
+        <i class="bi bi-house me-2"></i>Back to store
+    </a>
+</div>

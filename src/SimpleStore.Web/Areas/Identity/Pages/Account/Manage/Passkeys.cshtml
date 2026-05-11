@@ -1,0 +1,101 @@
+@page
+@model PasskeysModel
+@{
+    ViewData["Title"] = "Passkeys";
+}
+
+<div class="container py-5">
+    <h1 class="h3 mb-4"><i class="bi bi-person-circle me-2"></i>My account</h1>
+
+    @if (!string.IsNullOrEmpty(Model.StatusMessage))
+    {
+        <div class="alert alert-success">@Model.StatusMessage</div>
+    }
+    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="alert alert-danger">@Model.ErrorMessage</div>
+    }
+
+    <div class="row">
+        <div class="col-md-3 mb-4">
+            <partial name="_ManageNav" />
+        </div>
+        <div class="col-md-9">
+            <div class="card shadow-sm mb-4">
+                <div class="card-body p-4">
+                    <h2 class="h5 mb-3">Add a passkey</h2>
+                    <p class="text-muted small">
+                        Passkeys let you sign in without a password using Windows Hello, Touch ID, or a security key.
+                    </p>
+                    <div class="input-group mb-2">
+                        <input id="passkey-name" type="text" class="form-control" placeholder="Name this passkey (e.g. My laptop)" maxlength="60" />
+                        <button id="add-passkey" type="button" class="btn btn-primary">
+                            <i class="bi bi-plus-lg me-2"></i>Add passkey
+                        </button>
+                    </div>
+                    <div id="passkey-status" class="small mt-2"></div>
+                    @Html.AntiForgeryToken()
+                </div>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-body p-4">
+                    <h2 class="h5 mb-3">Registered passkeys</h2>
+                    @if (Model.Passkeys.Count == 0)
+                    {
+                        <p class="text-muted mb-0">No passkeys registered yet.</p>
+                    }
+                    else
+                    {
+                        <ul class="list-group">
+                            @foreach (var p in Model.Passkeys)
+                            {
+                                var idBase64 = Convert.ToBase64String(p.CredentialId);
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <div class="fw-semibold">
+                                            <i class="bi bi-fingerprint me-2"></i>@(string.IsNullOrWhiteSpace(p.Name) ? "Unnamed passkey" : p.Name)
+                                        </div>
+                                        <div class="text-muted small">
+                                            Added @p.CreatedAt.LocalDateTime.ToString("g")
+                                        </div>
+                                    </div>
+                                    <form method="post" asp-page-handler="Delete" class="m-0">
+                                        <input type="hidden" name="credentialId" value="@idBase64" />
+                                        <button type="submit" class="btn btn-sm btn-outline-danger"
+                                                onclick="return confirm('Remove this passkey?');">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/passkeys.js" asp-append-version="true"></script>
+    <script>
+        document.getElementById('add-passkey').addEventListener('click', async () => {
+            const statusEl = document.getElementById('passkey-status');
+            const nameEl = document.getElementById('passkey-name');
+            const name = (nameEl.value || '').trim();
+            statusEl.className = 'small mt-2 text-muted';
+            statusEl.textContent = 'Waiting for authenticator...';
+            try {
+                const token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+                await window.simpleStorePasskeys.register(token, name);
+                statusEl.className = 'small mt-2 text-success';
+                statusEl.textContent = 'Passkey added.';
+                window.location.reload();
+            } catch (e) {
+                statusEl.className = 'small mt-2 text-danger';
+                statusEl.textContent = e.message || 'Could not add passkey.';
+            }
+        });
+    </script>
+}

@@ -48,6 +48,17 @@
                             </a>
                             <ul class="dropdown-menu dropdown-menu-end">
                                 <li>
+                                    <a class="dropdown-item" asp-area="Identity" asp-page="/Account/Manage/Index">
+                                        <i class="bi bi-person me-2"></i>Manage account
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item" asp-area="Identity" asp-page="/Account/Manage/Passkeys">
+                                        <i class="bi bi-fingerprint me-2"></i>Passkeys
+                                    </a>
+                                </li>
+                                <li><hr class="dropdown-divider" /></li>
+                                <li>
                                     <form asp-area="Identity" asp-page="/Account/Logout" method="post">
                                         <button type="submit" class="dropdown-item">
                                             <i class="bi bi-box-arrow-right me-2"></i>Sign Out

@@ -15,9 +15,10 @@ builder.Services.AddRazorPages();
 // Add DbContext
 builder.AddNpgsqlDbContext<StoreDbContext>("storedb");
 
-// Add Identity
+// Add Identity (schema v3 enables the passkey table)
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 {
+    options.Stores.SchemaVersion = IdentitySchemaVersions.Version3;
     options.Password.RequireDigit = true;
     options.Password.RequiredLength = 6;
     options.Password.RequireNonAlphanumeric = false;
@@ -26,6 +27,19 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 })
 .AddEntityFrameworkStores<StoreDbContext>()
 .AddDefaultTokenProviders();
+
+builder.Services.Configure<IdentityPasskeyOptions>(options =>
+{
+    options.AuthenticatorTimeout = TimeSpan.FromMinutes(2);
+});
+
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    options.LoginPath = "/Identity/Account/Login";
+    options.LogoutPath = "/Identity/Account/Logout";
+    options.AccessDeniedPath = "/Identity/Account/AccessDenied";
+    options.SlidingExpiration = true;
+});
 
 // Session for cart
 builder.Services.AddSession(options =>
@@ -64,7 +78,9 @@ app.UseAuthorization();
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<StoreDbContext>();
+    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
     await DbSeeder.SeedAsync(context);
+    await DbSeeder.SeedIdentityAsync(userManager);
 }
 
 app.MapControllerRoute(
