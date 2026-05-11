@@ -1,17 +1,43 @@
 @inherits LayoutComponentBase
+@inject NavigationManager Nav
+@implements IDisposable
 
 <div class="page">
-    <div class="sidebar">
+    <aside class="sidebar">
         <NavMenu />
-    </div>
+    </aside>
 
-    <main>
-        <div class="top-row px-4">
-            <span class="fw-semibold text-muted">SimpleStore Administration</span>
-            <a href="/" class="ms-3">Dashboard</a>
-        </div>
+    <main class="main">
+        <header class="topbar">
+            <div class="topbar-left">
+                <button class="sidebar-toggle" type="button" aria-label="Toggle navigation"
+                        onclick="document.querySelector('.navbar-toggler').click()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="3" y1="6" x2="21" y2="6"></line>
+                        <line x1="3" y1="12" x2="21" y2="12"></line>
+                        <line x1="3" y1="18" x2="21" y2="18"></line>
+                    </svg>
+                </button>
+                <nav class="crumbs" aria-label="Breadcrumb">
+                    <a href="/">Admin</a>
+                    <span class="crumb-sep" aria-hidden="true">/</span>
+                    <span class="crumb-current">@CurrentPageName</span>
+                </nav>
+            </div>
+            <div class="topbar-right">
+                <a class="topbar-link" href="https://localhost/" target="_blank" rel="noopener">
+                    View storefront
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M7 17 17 7"></path>
+                        <path d="M7 7h10v10"></path>
+                    </svg>
+                </a>
+            </div>
+        </header>
 
-        <article class="content px-4 py-4">
+        <article class="content">
             @Body
         </article>
     </main>
@@ -22,3 +48,35 @@
     <a href="." class="reload">Reload</a>
     <span class="dismiss">🗙</span>
 </div>
+
+@code {
+    private string CurrentPageName = "Dashboard";
+
+    protected override void OnInitialized()
+    {
+        Nav.LocationChanged += HandleLocationChanged;
+        UpdateCurrentPage(Nav.Uri);
+    }
+
+    private void HandleLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        UpdateCurrentPage(e.Location);
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateCurrentPage(string uri)
+    {
+        var path = Nav.ToBaseRelativePath(uri).Trim('/').ToLowerInvariant();
+        CurrentPageName = path switch
+        {
+            "" => "Dashboard",
+            "customers" => "Customers",
+            "categories" => "Categories",
+            "products" => "Products",
+            "orders" => "Orders",
+            _ => "Page"
+        };
+    }
+
+    public void Dispose() => Nav.LocationChanged -= HandleLocationChanged;
+}

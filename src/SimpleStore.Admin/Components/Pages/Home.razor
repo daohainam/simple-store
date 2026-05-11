@@ -3,64 +3,69 @@
 
 <PageTitle>Dashboard</PageTitle>
 
-<h1 class="mb-4">Admin Dashboard</h1>
+<header class="page-header">
+    <div>
+        <h1>Dashboard</h1>
+        <p class="page-subtitle">An overview of customers, catalog, and orders.</p>
+    </div>
+</header>
 
 @if (isLoading)
 {
-    <p>Loading metrics...</p>
+    <p class="text-muted">Loading metrics&hellip;</p>
 }
 else
 {
     <div class="row g-3 mb-4">
         <div class="col-md-6 col-xl-3">
-            <div class="card shadow-sm border-0 h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Customers</p>
-                    <h3 class="mb-0">@customerCount</h3>
+            <div class="card h-100">
+                <div class="card-body stat-card">
+                    <p class="stat-label">Customers</p>
+                    <p class="stat-value">@customerCount</p>
                 </div>
             </div>
         </div>
         <div class="col-md-6 col-xl-3">
-            <div class="card shadow-sm border-0 h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Categories</p>
-                    <h3 class="mb-0">@categoryCount</h3>
+            <div class="card h-100">
+                <div class="card-body stat-card">
+                    <p class="stat-label">Categories</p>
+                    <p class="stat-value">@categoryCount</p>
                 </div>
             </div>
         </div>
         <div class="col-md-6 col-xl-3">
-            <div class="card shadow-sm border-0 h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Products</p>
-                    <h3 class="mb-0">@productCount</h3>
+            <div class="card h-100">
+                <div class="card-body stat-card">
+                    <p class="stat-label">Products</p>
+                    <p class="stat-value">@productCount</p>
                 </div>
             </div>
         </div>
         <div class="col-md-6 col-xl-3">
-            <div class="card shadow-sm border-0 h-100">
-                <div class="card-body">
-                    <p class="text-muted mb-1">Orders</p>
-                    <h3 class="mb-0">@orderCount</h3>
+            <div class="card h-100">
+                <div class="card-body stat-card">
+                    <p class="stat-label">Orders</p>
+                    <p class="stat-value">@orderCount</p>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="card shadow-sm border-0">
+    <div class="card">
         <div class="card-body">
-            <h5 class="card-title">Sales Snapshot</h5>
-            <div class="row">
+            <h5 class="card-title mb-3">Sales snapshot</h5>
+            <div class="row g-3">
                 <div class="col-md-4">
-                    <p class="text-muted mb-1">Pending</p>
-                    <p class="fw-semibold">@pendingOrders</p>
+                    <p class="stat-label">Pending</p>
+                    <p class="stat-value" style="font-size:1.25rem;">@pendingOrders</p>
                 </div>
                 <div class="col-md-4">
-                    <p class="text-muted mb-1">Completed</p>
-                    <p class="fw-semibold">@completedOrders</p>
+                    <p class="stat-label">Completed</p>
+                    <p class="stat-value" style="font-size:1.25rem;">@completedOrders</p>
                 </div>
                 <div class="col-md-4">
-                    <p class="text-muted mb-1">Total Revenue</p>
-                    <p class="fw-semibold">@totalRevenue.ToString("C")</p>
+                    <p class="stat-label">Total revenue</p>
+                    <p class="stat-value" style="font-size:1.25rem;">@totalRevenue.ToString("C")</p>
                 </div>
             </div>
         </div>

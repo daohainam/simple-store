@@ -1,41 +1,80 @@
-<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">SimpleStore Admin</a>
+@*
+    Sidebar navigation. Section-grouped, mono icons, light theme.
+    The `.navbar-toggler` checkbox is the mobile open/close trigger,
+    toggled by .sidebar-toggle in MainLayout (it forwards the click).
+*@
+
+<div class="nav-brand">
+    <div class="nav-brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 7h18l-2 12H5L3 7Z"></path>
+            <path d="M8 7V5a4 4 0 0 1 8 0v2"></path>
+        </svg>
+    </div>
+    <div class="nav-brand-text">
+        <span class="nav-brand-name">SimpleStore</span>
+        <span class="nav-brand-sub">Admin</span>
     </div>
 </div>
 
 <input type="checkbox" title="Navigation menu" class="navbar-toggler" />
 
 <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="nav flex-column">
-        <div class="nav-item px-3">
+    <nav class="nav-sections">
+        <div class="nav-section">
+            <p class="nav-section-label">Overview</p>
             <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Dashboard
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 12 12 3l9 9"></path>
+                    <path d="M5 10v10h14V10"></path>
+                </svg>
+                <span>Dashboard</span>
             </NavLink>
         </div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="customers">
-                <span class="bi bi-people-fill-nav-menu" aria-hidden="true"></span> Customers
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="categories">
-                <span class="bi bi-tags-fill-nav-menu" aria-hidden="true"></span> Categories
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
+        <div class="nav-section">
+            <p class="nav-section-label">Commerce</p>
             <NavLink class="nav-link" href="products">
-                <span class="bi bi-box-seam-fill-nav-menu" aria-hidden="true"></span> Products
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m3.3 7 8.7 5 8.7-5"></path>
+                    <path d="M12 22V12"></path>
+                    <path d="M20.5 7.3 12 2 3.5 7.3v9.4L12 22l8.5-5.3V7.3Z"></path>
+                </svg>
+                <span>Products</span>
+            </NavLink>
+            <NavLink class="nav-link" href="categories">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20.6 13.6 13.6 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8Z"></path>
+                    <circle cx="7.5" cy="7.5" r="1.2" fill="currentColor"></circle>
+                </svg>
+                <span>Categories</span>
+            </NavLink>
+            <NavLink class="nav-link" href="orders">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 4h14l1 4H4V4Z"></path>
+                    <path d="M4 8v11l3-1 3 1 3-1 3 1 3-1V8"></path>
+                    <path d="M8 13h6"></path>
+                </svg>
+                <span>Orders</span>
             </NavLink>
         </div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="orders">
-                <span class="bi bi-receipt-cutoff-nav-menu" aria-hidden="true"></span> Orders
+        <div class="nav-section">
+            <p class="nav-section-label">People</p>
+            <NavLink class="nav-link" href="customers">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="9" cy="8" r="3.5"></circle>
+                    <path d="M2.5 20a6.5 6.5 0 0 1 13 0"></path>
+                    <circle cx="17" cy="9" r="2.8"></circle>
+                    <path d="M21.5 18a4.5 4.5 0 0 0-7.5-3.3"></path>
+                </svg>
+                <span>Customers</span>
             </NavLink>
         </div>
     </nav>
+
+    <div class="nav-footer">
+        <span>v1.0</span>
+        <span>&copy; @DateTime.Now.Year</span>
+    </div>
 </div>

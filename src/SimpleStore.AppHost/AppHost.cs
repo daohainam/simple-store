@@ -1,7 +1,7 @@
 var builder = DistributedApplication.CreateBuilder(args);
 
 var postgres = builder.AddPostgres("postgres")
-    .WithPgAdmin();
+    .WithPgWeb();
 
 var storeDb = postgres.AddDatabase("storedb");
 

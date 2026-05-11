@@ -5,21 +5,21 @@
     int? selectedCategoryId = ViewBag.SelectedCategoryId;
     string searchTerm = ViewBag.SearchTerm ?? "";
 }
-<div class="bg-primary text-white py-5 mb-4">
-    <div class="container">
+<section class="hero-section py-5 mb-4">
+    <div class="container position-relative">
         <h1 class="display-5 fw-bold"><i class="bi bi-grid me-2"></i>Product Catalog</h1>
         <p class="lead">Discover our amazing collection of products</p>
         <form method="get" class="d-flex gap-2 mt-3">
             <input type="text" name="search" value="@searchTerm" class="form-control form-control-lg" placeholder="Search products..." style="max-width: 400px;" />
-            <button type="submit" class="btn btn-light btn-lg"><i class="bi bi-search"></i></button>
+            <button type="submit" class="btn btn-primary btn-lg"><i class="bi bi-search"></i></button>
         </form>
     </div>
-</div>
+</section>
 <div class="container">
     <div class="row">
         <div class="col-lg-3 mb-4">
             <div class="card shadow-sm">
-                <div class="card-header bg-primary text-white"><h6 class="mb-0"><i class="bi bi-funnel me-2"></i>Categories</h6></div>
+                <div class="card-header bg-primary text-white"><h6 class="mb-0 text-white"><i class="bi bi-funnel me-2"></i>Categories</h6></div>
                 <div class="list-group list-group-flush">
                     <a href="@Url.Action("Index")" class="list-group-item list-group-item-action @(selectedCategoryId == null ? "active" : "")">
                         <i class="bi bi-grid me-2"></i>All Products
