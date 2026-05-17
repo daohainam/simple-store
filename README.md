@@ -19,6 +19,18 @@ A sample e-commerce application built with **ASP.NET Core 10**, **Entity Framewo
 
 ---
 
+## Screenshots
+
+### Frontend
+
+![SimpleStore Frontend](img/frontend.png)
+
+### Backend
+
+![SimpleStore Backend](img/backend.png)
+
+---
+
 ## Project Structure
 
 ```
