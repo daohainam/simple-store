@@ -1,5 +1,6 @@
 @page "/customers"
-@inject StoreDbContext Db
+@inject IdentityDbContext IdentityDb
+@inject OrderDbContext OrderDb
 
 <PageTitle>Customers</PageTitle>
 
@@ -82,12 +83,12 @@ else
     {
         customers.Clear();
 
-        var orderCounts = await Db.Orders
+        var orderCounts = await OrderDb.Orders
             .GroupBy(o => o.UserId)
             .Select(g => new { UserId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.UserId, x => x.Count);
 
-        var users = await Db.Users
+        var users = await IdentityDb.Users
             .OrderBy(u => u.Email)
             .ToListAsync();
 
@@ -109,20 +110,20 @@ else
 
     private async Task SaveCustomerAsync(CustomerRow row)
     {
-        var user = await Db.Users.FirstOrDefaultAsync(x => x.Id == row.Id);
+        var user = await IdentityDb.Users.FirstOrDefaultAsync(x => x.Id == row.Id);
         if (user is null)
         {
             return;
         }
 
         user.FullName = row.FullName.Trim();
-        await Db.SaveChangesAsync();
+        await IdentityDb.SaveChangesAsync();
         message = $"Updated {row.Email}.";
     }
 
     private async Task ToggleLockAsync(CustomerRow row)
     {
-        var user = await Db.Users.FirstOrDefaultAsync(x => x.Id == row.Id);
+        var user = await IdentityDb.Users.FirstOrDefaultAsync(x => x.Id == row.Id);
         if (user is null)
         {
             return;
@@ -141,7 +142,7 @@ else
             message = $"Locked {row.Email}.";
         }
 
-        await Db.SaveChangesAsync();
+        await IdentityDb.SaveChangesAsync();
     }
 
     private sealed class CustomerRow

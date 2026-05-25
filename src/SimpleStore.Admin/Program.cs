@@ -8,7 +8,9 @@ builder.AddServiceDefaults();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-builder.AddNpgsqlDbContext<StoreDbContext>("storedb");
+builder.AddNpgsqlDbContext<CatalogDbContext>("catalogdb");
+builder.AddNpgsqlDbContext<OrderDbContext>("orderdb");
+builder.AddNpgsqlDbContext<IdentityDbContext>("identitydb");
 
 var app = builder.Build();
 

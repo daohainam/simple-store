@@ -6,8 +6,8 @@ namespace SimpleStore.Web.Services;
 
 public class OrderService : IOrderService
 {
-    private readonly StoreDbContext _context;
-    public OrderService(StoreDbContext context) => _context = context;
+    private readonly OrderDbContext _context;
+    public OrderService(OrderDbContext context) => _context = context;
 
     public async Task<Order> CreateOrderAsync(string userId, string shippingAddress, List<CartItem> cartItems)
     {
@@ -21,6 +21,7 @@ public class OrderService : IOrderService
             Items = cartItems.Select(i => new OrderItem
             {
                 ProductId = i.ProductId,
+                ProductName = i.ProductName,
                 Quantity = i.Quantity,
                 UnitPrice = i.UnitPrice
             }).ToList()
@@ -32,13 +33,13 @@ public class OrderService : IOrderService
 
     public async Task<IEnumerable<Order>> GetUserOrdersAsync(string userId) =>
         await _context.Orders
-            .Include(o => o.Items).ThenInclude(i => i.Product)
+            .Include(o => o.Items)
             .Where(o => o.UserId == userId)
             .OrderByDescending(o => o.OrderDate)
             .ToListAsync();
 
     public async Task<Order?> GetOrderByIdAsync(int orderId, string userId) =>
         await _context.Orders
-            .Include(o => o.Items).ThenInclude(i => i.Product)
+            .Include(o => o.Items)
             .FirstOrDefaultAsync(o => o.Id == orderId && o.UserId == userId);
 }
