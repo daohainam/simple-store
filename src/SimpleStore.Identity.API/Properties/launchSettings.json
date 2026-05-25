@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "SimpleStore.Identity.API": {
+      "commandName": "Project",
+      "launchBrowser": false,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:49170;http://localhost:49171"
+    }
+  }
+}

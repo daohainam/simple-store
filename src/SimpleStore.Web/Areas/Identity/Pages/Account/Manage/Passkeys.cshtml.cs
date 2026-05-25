@@ -1,23 +1,17 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using SimpleStore.Data.Identity;
+using SimpleStore.Identity.API.Client;
 
 namespace SimpleStore.Web.Areas.Identity.Pages.Account.Manage;
 
 [Authorize]
 public class PasskeysModel : PageModel
 {
-    private readonly UserManager<ApplicationUser> _userManager;
-    private readonly SignInManager<ApplicationUser> _signInManager;
+    private readonly IIdentityApiClient _identity;
 
-    public PasskeysModel(UserManager<ApplicationUser> userManager, SignInManager<ApplicationUser> signInManager)
-    {
-        _userManager = userManager;
-        _signInManager = signInManager;
-    }
+    public PasskeysModel(IIdentityApiClient identity) => _identity = identity;
 
     public IReadOnlyList<UserPasskeyInfo> Passkeys { get; private set; } = Array.Empty<UserPasskeyInfo>();
 
@@ -29,59 +23,36 @@ public class PasskeysModel : PageModel
 
     public async Task<IActionResult> OnGetAsync()
     {
-        var user = await _userManager.GetUserAsync(User);
-        if (user is null) return NotFound();
-
-        Passkeys = (await _userManager.GetPasskeysAsync(user)).ToList();
+        Passkeys = await _identity.GetPasskeysAsync();
         return Page();
     }
 
     // Step 2 of registration: server issues PublicKeyCredentialCreationOptions.
     public async Task<IActionResult> OnPostCreationOptionsAsync()
     {
-        var user = await _userManager.GetUserAsync(User);
-        if (user is null) return Unauthorized();
-
-        var userId = await _userManager.GetUserIdAsync(user);
-        var userName = await _userManager.GetUserNameAsync(user) ?? "User";
-
-        var optionsJson = await _signInManager.MakePasskeyCreationOptionsAsync(new()
-        {
-            Id = userId,
-            Name = userName,
-            DisplayName = user.FullName.Length > 0 ? user.FullName : userName
-        });
-
+        var optionsJson = await _identity.GetPasskeyCreationOptionsAsync();
         return Content(optionsJson, "application/json");
     }
 
     // Step 7 of registration: server verifies attestation and stores the passkey.
-    public async Task<IActionResult> OnPostRegisterAsync([FromBody] RegisterRequest body)
+    public async Task<IActionResult> OnPostRegisterAsync([FromBody] RegisterRequestBody body)
     {
-        var user = await _userManager.GetUserAsync(User);
-        if (user is null) return Unauthorized();
-
         if (body.Credential.ValueKind == JsonValueKind.Undefined)
         {
             return BadRequest(new { error = "Missing credential." });
         }
 
-        var attestation = await _signInManager.PerformPasskeyAttestationAsync(body.Credential.GetRawText());
-        if (!attestation.Succeeded)
+        try
         {
-            return BadRequest(new { error = attestation.Failure?.Message ?? "Attestation failed." });
+            await _identity.PasskeyAttestationAsync(new PasskeyAttestationRequest
+            {
+                CredentialJson = body.Credential.GetRawText(),
+                Name = body.Name
+            });
         }
-
-        var passkey = attestation.Passkey;
-        if (!string.IsNullOrWhiteSpace(body.Name))
+        catch (HttpRequestException ex)
         {
-            passkey.Name = body.Name.Trim();
-        }
-
-        var add = await _userManager.AddOrUpdatePasskeyAsync(user, passkey);
-        if (!add.Succeeded)
-        {
-            return BadRequest(new { error = string.Join("; ", add.Errors.Select(e => e.Description)) });
+            return BadRequest(new { error = ex.Message });
         }
 
         return new JsonResult(new { ok = true });
@@ -89,34 +60,19 @@ public class PasskeysModel : PageModel
 
     public async Task<IActionResult> OnPostDeleteAsync(string credentialId)
     {
-        var user = await _userManager.GetUserAsync(User);
-        if (user is null) return NotFound();
-
-        var bytes = Convert.FromBase64String(NormalizeBase64(credentialId));
-        var passkey = await _userManager.GetPasskeyAsync(user, bytes);
-        if (passkey is null)
+        try
         {
-            ErrorMessage = "Passkey not found.";
-            return RedirectToPage();
+            await _identity.DeletePasskeyAsync(credentialId);
+            StatusMessage = "Passkey removed.";
         }
-
-        var result = await _userManager.RemovePasskeyAsync(user, bytes);
-        StatusMessage = result.Succeeded ? "Passkey removed." : "Failed to remove passkey.";
+        catch (HttpRequestException)
+        {
+            ErrorMessage = "Failed to remove passkey.";
+        }
         return RedirectToPage();
     }
 
-    private static string NormalizeBase64(string input)
-    {
-        var s = input.Replace('-', '+').Replace('_', '/');
-        return (s.Length % 4) switch
-        {
-            2 => s + "==",
-            3 => s + "=",
-            _ => s
-        };
-    }
-
-    public class RegisterRequest
+    public class RegisterRequestBody
     {
         public JsonElement Credential { get; set; }
         public string? Name { get; set; }

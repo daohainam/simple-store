@@ -50,7 +50,7 @@
                         <ul class="list-group">
                             @foreach (var p in Model.Passkeys)
                             {
-                                var idBase64 = Convert.ToBase64String(p.CredentialId);
+                                var idBase64 = p.CredentialId;
                                 <li class="list-group-item d-flex justify-content-between align-items-center">
                                     <div>
                                         <div class="fw-semibold">

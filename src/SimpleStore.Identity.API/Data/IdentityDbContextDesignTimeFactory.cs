@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace SimpleStore.Data;
+namespace SimpleStore.Identity.API.Data;
 
 // Used only by `dotnet ef` at design time. Configures IdentityOptions so that
 // IdentityDbContext.OnModelCreating sees SchemaVersion = Version3 and emits

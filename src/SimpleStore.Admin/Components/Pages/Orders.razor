@@ -1,6 +1,7 @@
 @page "/orders"
+@attribute [Authorize(Roles = "Admin")]
 @inject OrderDbContext OrderDb
-@inject IdentityDbContext IdentityDb
+@inject IIdentityApiClient Identity
 
 <PageTitle>Orders</PageTitle>
 
@@ -86,9 +87,12 @@ else
     {
         orders.Clear();
 
-        var users = await IdentityDb.Users
-            .AsNoTracking()
-            .ToDictionaryAsync(u => u.Id, u => string.IsNullOrWhiteSpace(u.FullName) ? (u.Email ?? u.Id) : u.FullName);
+        // Pull a single page of users from Identity.API and dictionary-lookup the customer name —
+        // this is the cross-service equivalent of the old EF join across identitydb and orderdb.
+        var users = await Identity.GetUsersAsync(page: 1, pageSize: 100);
+        var userLabels = users.Items.ToDictionary(
+            u => u.Id,
+            u => string.IsNullOrWhiteSpace(u.FullName) ? u.Email : u.FullName);
 
         var rows = await OrderDb.Orders
             .AsNoTracking()
@@ -108,7 +112,7 @@ else
 
         foreach (var row in rows)
         {
-            row.CustomerLabel = users.GetValueOrDefault(row.UserId, row.UserId);
+            row.CustomerLabel = userLabels.GetValueOrDefault(row.UserId, row.UserId);
             orders.Add(row);
         }
 

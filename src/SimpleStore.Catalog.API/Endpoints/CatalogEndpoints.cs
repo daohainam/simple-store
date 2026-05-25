@@ -44,19 +44,19 @@ public static class CatalogEndpoints
         {
             var created = await service.CreateProductAsync(dto, ct);
             return Results.Created($"/api/catalog/products/{created.Id}", created);
-        });
+        }).RequireAuthorization("Admin");
 
         products.MapPut("/{id:int}", async (int id, ProductDto dto, ICatalogService service, CancellationToken ct) =>
         {
             var updated = await service.UpdateProductAsync(id, dto, ct);
             return updated ? Results.NoContent() : Results.NotFound();
-        });
+        }).RequireAuthorization("Admin");
 
         products.MapDelete("/{id:int}", async (int id, ICatalogService service, CancellationToken ct) =>
         {
             var deleted = await service.DeleteProductAsync(id, ct);
             return deleted ? Results.NoContent() : Results.NotFound();
-        });
+        }).RequireAuthorization("Admin");
     }
 
     private static void MapCategoryEndpoints(RouteGroupBuilder group)
@@ -86,13 +86,13 @@ public static class CatalogEndpoints
         {
             var created = await service.CreateCategoryAsync(dto, ct);
             return Results.Created($"/api/catalog/categories/{created.Id}", created);
-        });
+        }).RequireAuthorization("Admin");
 
         categories.MapPut("/{id:int}", async (int id, CategoryDto dto, ICatalogService service, CancellationToken ct) =>
         {
             var updated = await service.UpdateCategoryAsync(id, dto, ct);
             return updated ? Results.NoContent() : Results.NotFound();
-        });
+        }).RequireAuthorization("Admin");
 
         categories.MapDelete("/{id:int}", async (int id, ICatalogService service, CancellationToken ct) =>
         {
@@ -104,6 +104,6 @@ public static class CatalogEndpoints
                 DeleteCategoryResult.HasProducts => Results.Conflict(new { error = "Category still has products." }),
                 _ => Results.StatusCode(500)
             };
-        });
+        }).RequireAuthorization("Admin");
     }
 }

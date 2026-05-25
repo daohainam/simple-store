@@ -1,23 +1,17 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using SimpleStore.Data.Identity;
+using SimpleStore.Identity.API.Client;
 
 namespace SimpleStore.Web.Areas.Identity.Pages.Account.Manage;
 
 [Authorize]
 public class IndexModel : PageModel
 {
-    private readonly UserManager<ApplicationUser> _userManager;
-    private readonly SignInManager<ApplicationUser> _signInManager;
+    private readonly IIdentityApiClient _identity;
 
-    public IndexModel(UserManager<ApplicationUser> userManager, SignInManager<ApplicationUser> signInManager)
-    {
-        _userManager = userManager;
-        _signInManager = signInManager;
-    }
+    public IndexModel(IIdentityApiClient identity) => _identity = identity;
 
     public string Email { get; set; } = string.Empty;
 
@@ -35,31 +29,24 @@ public class IndexModel : PageModel
 
     public async Task<IActionResult> OnGetAsync()
     {
-        var user = await _userManager.GetUserAsync(User);
-        if (user is null) return NotFound();
+        var me = await _identity.GetMeAsync();
+        if (me is null) return NotFound();
 
-        Email = user.Email ?? string.Empty;
-        Input = new InputModel { FullName = user.FullName };
+        Email = me.Email;
+        Input = new InputModel { FullName = me.FullName };
         return Page();
     }
 
     public async Task<IActionResult> OnPostAsync()
     {
-        var user = await _userManager.GetUserAsync(User);
-        if (user is null) return NotFound();
-
         if (!ModelState.IsValid)
         {
-            Email = user.Email ?? string.Empty;
+            var me = await _identity.GetMeAsync();
+            Email = me?.Email ?? string.Empty;
             return Page();
         }
 
-        if (Input.FullName != user.FullName)
-        {
-            user.FullName = Input.FullName;
-            await _userManager.UpdateAsync(user);
-            await _signInManager.RefreshSignInAsync(user);
-        }
+        await _identity.UpdateMeAsync(new UpdateProfileRequest { FullName = Input.FullName });
 
         StatusMessage = "Profile updated.";
         return RedirectToPage();

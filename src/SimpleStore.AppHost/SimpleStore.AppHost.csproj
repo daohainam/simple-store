@@ -15,6 +15,7 @@
   <ItemGroup>
     <ProjectReference Include="..\SimpleStore.Admin\SimpleStore.Admin.csproj" />
     <ProjectReference Include="..\SimpleStore.Catalog.API\SimpleStore.Catalog.API.csproj" />
+    <ProjectReference Include="..\SimpleStore.Identity.API\SimpleStore.Identity.API.csproj" />
     <ProjectReference Include="..\SimpleStore.Web\SimpleStore.Web.csproj" />
   </ItemGroup>
 
