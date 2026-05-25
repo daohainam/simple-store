@@ -3,11 +3,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
-using SimpleStore.Data;
+using SimpleStore.Catalog.API.Data;
 
 #nullable disable
 
-namespace SimpleStore.Data.Migrations.Catalog
+namespace SimpleStore.Catalog.API.Migrations
 {
     [DbContext(typeof(CatalogDbContext))]
     partial class CatalogDbContextModelSnapshot : ModelSnapshot
@@ -21,7 +21,7 @@ namespace SimpleStore.Data.Migrations.Catalog
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("SimpleStore.Data.Models.Category", b =>
+            modelBuilder.Entity("SimpleStore.Catalog.API.Models.Category", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -42,7 +42,7 @@ namespace SimpleStore.Data.Migrations.Catalog
                     b.ToTable("Categories");
                 });
 
-            modelBuilder.Entity("SimpleStore.Data.Models.Product", b =>
+            modelBuilder.Entity("SimpleStore.Catalog.API.Models.Product", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -79,9 +79,9 @@ namespace SimpleStore.Data.Migrations.Catalog
                     b.ToTable("Products");
                 });
 
-            modelBuilder.Entity("SimpleStore.Data.Models.Product", b =>
+            modelBuilder.Entity("SimpleStore.Catalog.API.Models.Product", b =>
                 {
-                    b.HasOne("SimpleStore.Data.Models.Category", "Category")
+                    b.HasOne("SimpleStore.Catalog.API.Models.Category", "Category")
                         .WithMany("Products")
                         .HasForeignKey("CategoryId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -90,7 +90,7 @@ namespace SimpleStore.Data.Migrations.Catalog
                     b.Navigation("Category");
                 });
 
-            modelBuilder.Entity("SimpleStore.Data.Models.Category", b =>
+            modelBuilder.Entity("SimpleStore.Catalog.API.Models.Category", b =>
                 {
                     b.Navigation("Products");
                 });

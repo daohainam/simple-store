@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
-using SimpleStore.Data.Models;
+using SimpleStore.Catalog.API.Models;
 
-namespace SimpleStore.Data;
+namespace SimpleStore.Catalog.API.Data;
 
 public class CatalogDbContext : DbContext
 {

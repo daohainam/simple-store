@@ -1,5 +1,5 @@
 @page "/"
-@inject CatalogDbContext CatalogDb
+@inject ICatalogApiClient Catalog
 @inject OrderDbContext OrderDb
 @inject IdentityDbContext IdentityDb
 
@@ -87,8 +87,8 @@ else
     protected override async Task OnInitializedAsync()
     {
         customerCount = await IdentityDb.Users.CountAsync();
-        categoryCount = await CatalogDb.Categories.CountAsync();
-        productCount = await CatalogDb.Products.CountAsync();
+        categoryCount = await Catalog.GetCategoryCountAsync();
+        productCount = await Catalog.GetProductCountAsync();
         orderCount = await OrderDb.Orders.CountAsync();
         pendingOrders = await OrderDb.Orders.CountAsync(o => o.Status == "Pending");
         completedOrders = await OrderDb.Orders.CountAsync(o => o.Status == "Delivered");
