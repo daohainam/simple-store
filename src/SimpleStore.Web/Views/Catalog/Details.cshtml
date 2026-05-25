@@ -1,4 +1,5 @@
-@model SimpleStore.Data.Models.Product
+@using SimpleStore.Catalog.API.Client
+@model ProductDto
 @{
     ViewData["Title"] = Model.Name;
 }
@@ -6,7 +7,7 @@
     <nav aria-label="breadcrumb" class="mb-4">
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a asp-controller="Catalog" asp-action="Index">Catalog</a></li>
-            <li class="breadcrumb-item"><a asp-controller="Catalog" asp-action="Index" asp-route-categoryId="@Model.CategoryId">@Model.Category.Name</a></li>
+            <li class="breadcrumb-item"><a asp-controller="Catalog" asp-action="Index" asp-route-categoryId="@Model.CategoryId">@Model.CategoryName</a></li>
             <li class="breadcrumb-item active">@Model.Name</li>
         </ol>
     </nav>
@@ -19,7 +20,7 @@
             </div>
         </div>
         <div class="col-md-7">
-            <span class="badge bg-secondary mb-2">@Model.Category.Name</span>
+            <span class="badge bg-secondary mb-2">@Model.CategoryName</span>
             <h1 class="mb-3">@Model.Name</h1>
             <p class="lead text-muted">@Model.Description</p>
             <div class="fs-2 fw-bold text-primary mb-3">$@Model.Price.ToString("N2")</div>

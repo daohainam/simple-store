@@ -1,9 +1,12 @@
-@model IEnumerable<SimpleStore.Data.Models.Product>
+@using SimpleStore.Catalog.API.Client
+@model PagedResult<ProductDto>
 @{
     ViewData["Title"] = "Product Catalog";
-    var categories = ViewBag.Categories as IEnumerable<SimpleStore.Data.Models.Category>;
+    var categories = ViewBag.Categories as IEnumerable<CategoryDto>;
     int? selectedCategoryId = ViewBag.SelectedCategoryId;
     string searchTerm = ViewBag.SearchTerm ?? "";
+    var hasPrev = Model.Page > 1;
+    var hasNext = Model.Page < Model.TotalPages;
 }
 <section class="hero-section py-5 mb-4">
     <div class="container position-relative">
@@ -37,7 +40,7 @@
             </div>
         </div>
         <div class="col-lg-9">
-            @if (!Model.Any())
+            @if (!Model.Items.Any())
             {
                 <div class="text-center py-5">
                     <i class="bi bi-search display-1 text-muted"></i>
@@ -48,7 +51,7 @@
             else
             {
                 <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
-                    @foreach (var product in Model)
+                    @foreach (var product in Model.Items)
                     {
                         <div class="col">
                             <div class="card h-100 shadow-sm product-card">
@@ -56,7 +59,7 @@
                                     <i class="bi bi-box-seam display-1 text-secondary"></i>
                                 </div>
                                 <div class="card-body d-flex flex-column">
-                                    <span class="badge bg-secondary mb-2 align-self-start">@product.Category.Name</span>
+                                    <span class="badge bg-secondary mb-2 align-self-start">@product.CategoryName</span>
                                     <h5 class="card-title">@product.Name</h5>
                                     <p class="card-text text-muted small flex-grow-1">@product.Description</p>
                                     <div class="d-flex justify-content-between align-items-center mt-2">
@@ -82,6 +85,29 @@
                         </div>
                     }
                 </div>
+
+                @if (Model.TotalPages > 1)
+                {
+                    <nav aria-label="Catalog pagination" class="mt-4">
+                        <ul class="pagination justify-content-center">
+                            <li class="page-item @(hasPrev ? "" : "disabled")">
+                                <a class="page-link"
+                                   href="@(hasPrev ? Url.Action("Index", new { categoryId = selectedCategoryId, search = searchTerm, page = Model.Page - 1 }) : "#")">
+                                    <i class="bi bi-chevron-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="page-item disabled">
+                                <span class="page-link">Page @Model.Page of @Model.TotalPages</span>
+                            </li>
+                            <li class="page-item @(hasNext ? "" : "disabled")">
+                                <a class="page-link"
+                                   href="@(hasNext ? Url.Action("Index", new { categoryId = selectedCategoryId, search = searchTerm, page = Model.Page + 1 }) : "#")">
+                                    Next <i class="bi bi-chevron-right"></i>
+                                </a>
+                            </li>
+                        </ul>
+                    </nav>
+                }
             }
         </div>
     </div>

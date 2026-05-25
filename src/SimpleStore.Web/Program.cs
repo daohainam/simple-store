@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using SimpleStore.Catalog.API.Client;
 using SimpleStore.Data;
 using SimpleStore.Data.Identity;
 using SimpleStore.Web.Services;
@@ -12,10 +13,12 @@ builder.AddServiceDefaults();
 builder.Services.AddControllersWithViews();
 builder.Services.AddRazorPages();
 
-// Add DbContexts (one per bounded context, each with its own database)
-builder.AddNpgsqlDbContext<CatalogDbContext>("catalogdb");
+// Add DbContexts for Order and Identity (Catalog now lives in SimpleStore.Catalog.API)
 builder.AddNpgsqlDbContext<OrderDbContext>("orderdb");
 builder.AddNpgsqlDbContext<IdentityDbContext>("identitydb");
+
+// Catalog access is now over HTTP via the Catalog microservice.
+builder.AddCatalogApiClient();
 
 // Add Identity (schema v3 enables the passkey table)
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
@@ -56,7 +59,6 @@ builder.Services.AddHttpContextAccessor();
 
 // Register services
 builder.Services.AddScoped<ICartService, CartService>();
-builder.Services.AddScoped<ICatalogService, CatalogService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 
 var app = builder.Build();
@@ -76,17 +78,15 @@ app.UseSession();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Seed databases
+// Migrate Order and Identity databases (Catalog migrates itself in SimpleStore.Catalog.API)
 using (var scope = app.Services.CreateScope())
 {
-    var catalogDb = scope.ServiceProvider.GetRequiredService<CatalogDbContext>();
     var orderDb = scope.ServiceProvider.GetRequiredService<OrderDbContext>();
     var identityDb = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
     var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
 
     await identityDb.Database.MigrateAsync();
     await orderDb.Database.MigrateAsync();
-    await DbSeeder.SeedCatalogAsync(catalogDb);
     await DbSeeder.SeedIdentityAsync(userManager);
 }
 

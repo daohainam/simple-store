@@ -1,6 +1,5 @@
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
-using SimpleStore.Data;
+using SimpleStore.Catalog.API.Client;
 
 namespace SimpleStore.Web.Services;
 
@@ -8,12 +7,12 @@ public class CartService : ICartService
 {
     private const string CartKey = "shopping_cart";
     private readonly IHttpContextAccessor _httpContextAccessor;
-    private readonly CatalogDbContext _context;
+    private readonly ICatalogApiClient _catalog;
 
-    public CartService(IHttpContextAccessor httpContextAccessor, CatalogDbContext context)
+    public CartService(IHttpContextAccessor httpContextAccessor, ICatalogApiClient catalog)
     {
         _httpContextAccessor = httpContextAccessor;
-        _context = context;
+        _catalog = catalog;
     }
 
     private List<CartItem> GetCartFromSession()
@@ -41,7 +40,7 @@ public class CartService : ICartService
         }
         else
         {
-            var product = await _context.Products.FindAsync(productId);
+            var product = await _catalog.GetProductByIdAsync(productId);
             if (product != null)
             {
                 cart.Add(new CartItem

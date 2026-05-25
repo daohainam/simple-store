@@ -1,4 +1,5 @@
 using SimpleStore.Admin.Components;
+using SimpleStore.Catalog.API.Client;
 using SimpleStore.Data;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -8,9 +9,12 @@ builder.AddServiceDefaults();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-builder.AddNpgsqlDbContext<CatalogDbContext>("catalogdb");
+// Order and Identity still talk to Postgres directly.
 builder.AddNpgsqlDbContext<OrderDbContext>("orderdb");
 builder.AddNpgsqlDbContext<IdentityDbContext>("identitydb");
+
+// Catalog is a microservice — Admin reaches it over HTTP.
+builder.AddCatalogApiClient();
 
 var app = builder.Build();
 
