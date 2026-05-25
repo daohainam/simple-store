@@ -4,6 +4,8 @@
     <Project Path="src/SimpleStore.Catalog.API/SimpleStore.Catalog.API.csproj" />
     <Project Path="src/SimpleStore.Catalog.API.Client/SimpleStore.Catalog.API.Client.csproj" />
     <Project Path="src/SimpleStore.Data/SimpleStore.Data.csproj" />
+    <Project Path="src/SimpleStore.Identity.API/SimpleStore.Identity.API.csproj" />
+    <Project Path="src/SimpleStore.Identity.API.Client/SimpleStore.Identity.API.Client.csproj" />
     <Project Path="src/SimpleStore.Web/SimpleStore.Web.csproj" />
   </Folder>
   <Project Path="src/SimpleStore.AppHost/SimpleStore.AppHost.csproj" Id="25d9c4d7-07ad-4d61-8b98-9f247c5df997" />

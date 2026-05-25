@@ -1,22 +1,22 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using SimpleStore.Data.Identity;
+using SimpleStore.Identity.API.Client;
+using SimpleStore.Web.Services.Auth;
 
 namespace SimpleStore.Web.Areas.Identity.Pages.Account;
 
 [AllowAnonymous]
 public class RegisterModel : PageModel
 {
-    private readonly SignInManager<ApplicationUser> _signInManager;
-    private readonly UserManager<ApplicationUser> _userManager;
+    private readonly IIdentityApiClient _identity;
+    private readonly ITokenStore _tokens;
 
-    public RegisterModel(SignInManager<ApplicationUser> signInManager, UserManager<ApplicationUser> userManager)
+    public RegisterModel(IIdentityApiClient identity, ITokenStore tokens)
     {
-        _signInManager = signInManager;
-        _userManager = userManager;
+        _identity = identity;
+        _tokens = tokens;
     }
 
     [BindProperty]
@@ -56,25 +56,26 @@ public class RegisterModel : PageModel
             return Page();
         }
 
-        var user = new ApplicationUser
+        var response = await _identity.RegisterAsync(new RegisterRequest
         {
-            UserName = Input.Email,
             Email = Input.Email,
-            EmailConfirmed = true,
-            FullName = Input.FullName
-        };
+            FullName = Input.FullName,
+            Password = Input.Password
+        });
 
-        var result = await _userManager.CreateAsync(user, Input.Password);
-        if (!result.Succeeded)
+        if (response is null)
         {
-            foreach (var err in result.Errors)
-            {
-                ModelState.AddModelError(string.Empty, err.Description);
-            }
+            ModelState.AddModelError(string.Empty, "Could not create the account. Email may already be in use or the password is too weak.");
             return Page();
         }
 
-        await _signInManager.SignInAsync(user, isPersistent: false);
+        await _tokens.SetAsync(new TokenSet
+        {
+            AccessToken = response.AccessToken,
+            RefreshToken = response.RefreshToken,
+            ExpiresAt = response.ExpiresAt
+        });
+
         return LocalRedirect(returnUrl);
     }
 }

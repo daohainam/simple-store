@@ -1,0 +1,45 @@
+@page
+@model SimpleStore.Admin.Pages.Account.LoginModel
+@{
+    Layout = null;
+    ViewData["Title"] = "Sign in";
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign in - SimpleStore Admin</title>
+    <link rel="stylesheet" href="@Url.Content("~/lib/bootstrap/dist/css/bootstrap.min.css")" />
+</head>
+<body class="bg-light">
+    <div class="container py-5" style="max-width: 420px;">
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-4">
+                <h1 class="h4 mb-3">Admin sign in</h1>
+                @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+                {
+                    <div class="alert alert-danger">@Model.ErrorMessage</div>
+                }
+                <form method="post">
+                    <input type="hidden" asp-for="ReturnUrl" />
+                    <div class="mb-3">
+                        <label asp-for="Input.Email" class="form-label">Email</label>
+                        <input asp-for="Input.Email" class="form-control" autocomplete="username" autofocus />
+                        <span asp-validation-for="Input.Email" class="text-danger small"></span>
+                    </div>
+                    <div class="mb-3">
+                        <label asp-for="Input.Password" class="form-label">Password</label>
+                        <input asp-for="Input.Password" type="password" class="form-control" autocomplete="current-password" />
+                        <span asp-validation-for="Input.Password" class="text-danger small"></span>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Sign in</button>
+                </form>
+                <p class="text-muted small mt-3 mb-0">
+                    Only users with the <code>Admin</code> role can access this dashboard.
+                </p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

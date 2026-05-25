@@ -1,5 +1,6 @@
 @page "/customers"
-@inject IdentityDbContext IdentityDb
+@attribute [Authorize(Roles = "Admin")]
+@inject IIdentityApiClient Identity
 @inject OrderDbContext OrderDb
 
 <PageTitle>Customers</PageTitle>
@@ -29,7 +30,7 @@ else
                     <tr>
                         <th>Name</th>
                         <th>Email</th>
-                        <th>Phone</th>
+                        <th>Roles</th>
                         <th>Orders</th>
                         <th>Status</th>
                         <th class="text-end">Actions</th>
@@ -43,7 +44,7 @@ else
                                 <InputText class="form-control form-control-sm" @bind-Value="customer.FullName" />
                             </td>
                             <td>@customer.Email</td>
-                            <td>@customer.PhoneNumber</td>
+                            <td>@string.Join(", ", customer.Roles)</td>
                             <td>@customer.OrderCount</td>
                             <td>
                                 @if (customer.IsLocked)
@@ -88,19 +89,18 @@ else
             .Select(g => new { UserId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.UserId, x => x.Count);
 
-        var users = await IdentityDb.Users
-            .OrderBy(u => u.Email)
-            .ToListAsync();
+        // Single bulk fetch — pageSize=100 matches Identity.API's server-side clamp.
+        var users = await Identity.GetUsersAsync(page: 1, pageSize: 100);
 
-        foreach (var user in users)
+        foreach (var user in users.Items)
         {
             customers.Add(new CustomerRow
             {
                 Id = user.Id,
                 FullName = user.FullName,
-                Email = user.Email ?? string.Empty,
-                PhoneNumber = user.PhoneNumber ?? string.Empty,
-                IsLocked = user.LockoutEnd.HasValue && user.LockoutEnd > DateTimeOffset.UtcNow,
+                Email = user.Email,
+                Roles = user.Roles,
+                IsLocked = user.IsLockedOut,
                 OrderCount = orderCounts.GetValueOrDefault(user.Id)
             });
         }
@@ -110,39 +110,24 @@ else
 
     private async Task SaveCustomerAsync(CustomerRow row)
     {
-        var user = await IdentityDb.Users.FirstOrDefaultAsync(x => x.Id == row.Id);
-        if (user is null)
-        {
-            return;
-        }
-
-        user.FullName = row.FullName.Trim();
-        await IdentityDb.SaveChangesAsync();
+        await Identity.UpdateUserAsync(row.Id, new UpdateProfileRequest { FullName = row.FullName.Trim() });
         message = $"Updated {row.Email}.";
     }
 
     private async Task ToggleLockAsync(CustomerRow row)
     {
-        var user = await IdentityDb.Users.FirstOrDefaultAsync(x => x.Id == row.Id);
-        if (user is null)
-        {
-            return;
-        }
-
         if (row.IsLocked)
         {
-            user.LockoutEnd = null;
+            await Identity.UnlockUserAsync(row.Id);
             row.IsLocked = false;
             message = $"Unlocked {row.Email}.";
         }
         else
         {
-            user.LockoutEnd = DateTimeOffset.UtcNow.AddYears(100);
+            await Identity.LockUserAsync(row.Id);
             row.IsLocked = true;
             message = $"Locked {row.Email}.";
         }
-
-        await IdentityDb.SaveChangesAsync();
     }
 
     private sealed class CustomerRow
@@ -150,7 +135,7 @@ else
         public string Id { get; set; } = string.Empty;
         public string FullName { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
-        public string PhoneNumber { get; set; } = string.Empty;
+        public IReadOnlyList<string> Roles { get; set; } = Array.Empty<string>();
         public bool IsLocked { get; set; }
         public int OrderCount { get; set; }
     }

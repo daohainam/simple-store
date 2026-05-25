@@ -1,10 +1,12 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 using SimpleStore.Catalog.API;
 using SimpleStore.Catalog.API.Data;
 using SimpleStore.Catalog.API.Endpoints;
 using SimpleStore.Catalog.API.Services;
 
-// Internal-only service: runs on the Aspire network and is not directly reachable
-// from end users. No authentication is configured here; revisit when externalizing.
+// Internal API on the Aspire network. Reads are anonymous (storefront browsing);
+// writes require JWT-bearer auth with the "Admin" role — tokens are issued by SimpleStore.Identity.API.
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,6 +15,37 @@ builder.AddServiceDefaults();
 builder.AddNpgsqlDbContext<CatalogDbContext>("catalogdb");
 
 builder.Services.AddScoped<ICatalogService, CatalogService>();
+
+// JWT bearer — same Jwt:Issuer/Audience/Key as Identity.API (propagated by AppHost via env).
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? string.Empty;
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? string.Empty;
+var jwtKey = builder.Configuration["Jwt:Key"] ?? string.Empty;
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.MapInboundClaims = false;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtIssuer,
+            ValidAudience = jwtAudience,
+            IssuerSigningKey = new SymmetricSecurityKey(
+                string.IsNullOrEmpty(jwtKey) ? new byte[32] : Convert.FromBase64String(jwtKey)),
+            ClockSkew = TimeSpan.FromSeconds(30),
+            NameClaimType = "name",
+            RoleClaimType = "role"
+        };
+    });
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("Admin", p => p.RequireAuthenticatedUser().RequireRole("Admin"));
+});
 
 builder.Services.AddOpenApi();
 
@@ -24,6 +57,9 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapCatalogEndpoints();
 

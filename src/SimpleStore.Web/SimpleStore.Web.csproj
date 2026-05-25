@@ -7,7 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.3.3" />
-    <PackageReference Include="Microsoft.AspNetCore.Identity.UI" Version="10.0.8" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.8" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.8">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -15,6 +15,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\SimpleStore.Catalog.API.Client\SimpleStore.Catalog.API.Client.csproj" />
+    <ProjectReference Include="..\SimpleStore.Identity.API.Client\SimpleStore.Identity.API.Client.csproj" />
     <ProjectReference Include="..\SimpleStore.Data\SimpleStore.Data.csproj" />
     <ProjectReference Include="..\SimpleStore.ServiceDefaults\SimpleStore.ServiceDefaults.csproj" />
   </ItemGroup>
