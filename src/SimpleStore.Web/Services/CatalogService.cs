@@ -6,8 +6,8 @@ namespace SimpleStore.Web.Services;
 
 public class CatalogService : ICatalogService
 {
-    private readonly StoreDbContext _context;
-    public CatalogService(StoreDbContext context) => _context = context;
+    private readonly CatalogDbContext _context;
+    public CatalogService(CatalogDbContext context) => _context = context;
 
     public async Task<IEnumerable<Product>> GetProductsAsync(int? categoryId = null, string? searchTerm = null)
     {

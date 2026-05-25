@@ -1,5 +1,6 @@
 @page "/orders"
-@inject StoreDbContext Db
+@inject OrderDbContext OrderDb
+@inject IdentityDbContext IdentityDb
 
 <PageTitle>Orders</PageTitle>
 
@@ -85,11 +86,11 @@ else
     {
         orders.Clear();
 
-        var users = await Db.Users
+        var users = await IdentityDb.Users
             .AsNoTracking()
             .ToDictionaryAsync(u => u.Id, u => string.IsNullOrWhiteSpace(u.FullName) ? (u.Email ?? u.Id) : u.FullName);
 
-        var rows = await Db.Orders
+        var rows = await OrderDb.Orders
             .AsNoTracking()
             .Include(o => o.Items)
             .OrderByDescending(o => o.OrderDate)
@@ -116,14 +117,14 @@ else
 
     private async Task SaveStatusAsync(OrderRow row)
     {
-        var order = await Db.Orders.FirstOrDefaultAsync(o => o.Id == row.Id);
+        var order = await OrderDb.Orders.FirstOrDefaultAsync(o => o.Id == row.Id);
         if (order is null)
         {
             return;
         }
 
         order.Status = row.Status;
-        await Db.SaveChangesAsync();
+        await OrderDb.SaveChangesAsync();
         message = $"Order #{row.Id} updated to {row.Status}.";
     }
 

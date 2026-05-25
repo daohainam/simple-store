@@ -8,9 +8,9 @@ namespace SimpleStore.Data;
 // Used only by `dotnet ef` at design time. Configures IdentityOptions so that
 // IdentityDbContext.OnModelCreating sees SchemaVersion = Version3 and emits
 // the passkey entity into the model. See dotnet/efcore#36314.
-public class StoreDbContextDesignTimeFactory : IDesignTimeDbContextFactory<StoreDbContext>
+public class IdentityDbContextDesignTimeFactory : IDesignTimeDbContextFactory<IdentityDbContext>
 {
-    public StoreDbContext CreateDbContext(string[] args)
+    public IdentityDbContext CreateDbContext(string[] args)
     {
         var services = new ServiceCollection();
         services.Configure<IdentityOptions>(options =>
@@ -19,13 +19,13 @@ public class StoreDbContextDesignTimeFactory : IDesignTimeDbContextFactory<Store
         });
         var appServices = services.BuildServiceProvider();
 
-        var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__storedb")
-            ?? "Host=localhost;Database=storedb;Username=postgres;Password=postgres";
+        var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__identitydb")
+            ?? "Host=localhost;Database=identitydb;Username=postgres;Password=postgres";
 
-        var optionsBuilder = new DbContextOptionsBuilder<StoreDbContext>()
+        var optionsBuilder = new DbContextOptionsBuilder<IdentityDbContext>()
             .UseNpgsql(connectionString)
             .UseApplicationServiceProvider(appServices);
 
-        return new StoreDbContext(optionsBuilder.Options);
+        return new IdentityDbContext(optionsBuilder.Options);
     }
 }

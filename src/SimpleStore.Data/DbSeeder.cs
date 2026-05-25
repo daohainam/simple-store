@@ -28,10 +28,10 @@ public static class DbSeeder
         await userManager.CreateAsync(user, DemoUserPassword);
     }
 
-    public static async Task SeedAsync(StoreDbContext context)
+    public static async Task SeedCatalogAsync(CatalogDbContext context)
     {
         await context.Database.MigrateAsync();
-        
+
         if (!await context.Categories.AnyAsync())
         {
             var categories = new List<Category>
@@ -44,14 +44,14 @@ public static class DbSeeder
             context.Categories.AddRange(categories);
             await context.SaveChangesAsync();
         }
-        
+
         if (!await context.Products.AnyAsync())
         {
             var electronics = await context.Categories.FirstAsync(c => c.Name == "Electronics");
             var clothing = await context.Categories.FirstAsync(c => c.Name == "Clothing");
             var books = await context.Categories.FirstAsync(c => c.Name == "Books");
             var homeGarden = await context.Categories.FirstAsync(c => c.Name == "Home & Garden");
-            
+
             var products = new List<Product>
             {
                 new() { Name = "Wireless Headphones", Description = "Premium wireless headphones with noise cancellation", Price = 199.99m, Stock = 50, CategoryId = electronics.Id, ImageUrl = "/images/products/headphones.jpg" },

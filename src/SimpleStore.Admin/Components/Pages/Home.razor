@@ -1,5 +1,7 @@
 @page "/"
-@inject StoreDbContext Db
+@inject CatalogDbContext CatalogDb
+@inject OrderDbContext OrderDb
+@inject IdentityDbContext IdentityDb
 
 <PageTitle>Dashboard</PageTitle>
 
@@ -84,13 +86,13 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        customerCount = await Db.Users.CountAsync();
-        categoryCount = await Db.Categories.CountAsync();
-        productCount = await Db.Products.CountAsync();
-        orderCount = await Db.Orders.CountAsync();
-        pendingOrders = await Db.Orders.CountAsync(o => o.Status == "Pending");
-        completedOrders = await Db.Orders.CountAsync(o => o.Status == "Delivered");
-        totalRevenue = await Db.Orders.SumAsync(o => (decimal?)o.TotalAmount) ?? 0m;
+        customerCount = await IdentityDb.Users.CountAsync();
+        categoryCount = await CatalogDb.Categories.CountAsync();
+        productCount = await CatalogDb.Products.CountAsync();
+        orderCount = await OrderDb.Orders.CountAsync();
+        pendingOrders = await OrderDb.Orders.CountAsync(o => o.Status == "Pending");
+        completedOrders = await OrderDb.Orders.CountAsync(o => o.Status == "Delivered");
+        totalRevenue = await OrderDb.Orders.SumAsync(o => (decimal?)o.TotalAmount) ?? 0m;
         isLoading = false;
     }
 }

@@ -8,9 +8,9 @@ public class CartService : ICartService
 {
     private const string CartKey = "shopping_cart";
     private readonly IHttpContextAccessor _httpContextAccessor;
-    private readonly StoreDbContext _context;
+    private readonly CatalogDbContext _context;
 
-    public CartService(IHttpContextAccessor httpContextAccessor, StoreDbContext context)
+    public CartService(IHttpContextAccessor httpContextAccessor, CatalogDbContext context)
     {
         _httpContextAccessor = httpContextAccessor;
         _context = context;
