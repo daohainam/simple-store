@@ -12,6 +12,7 @@
     <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.3.5" />
     <PackageReference Include="Aspire.Hosting.RabbitMQ" Version="13.3.5" />
     <PackageReference Include="Aspire.Hosting.Redis" Version="13.3.5" />
+    <PackageReference Include="CommunityToolkit.Aspire.Hosting.KurrentDB" Version="13.3.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -20,6 +21,7 @@
     <ProjectReference Include="..\SimpleStore.Catalog.API\SimpleStore.Catalog.API.csproj" />
     <ProjectReference Include="..\SimpleStore.Gateway\SimpleStore.Gateway.csproj" />
     <ProjectReference Include="..\SimpleStore.Identity.API\SimpleStore.Identity.API.csproj" />
+    <ProjectReference Include="..\SimpleStore.Inventory.API\SimpleStore.Inventory.API.csproj" />
     <ProjectReference Include="..\SimpleStore.Order.API\SimpleStore.Order.API.csproj" />
     <ProjectReference Include="..\SimpleStore.Web\SimpleStore.Web.csproj" />
   </ItemGroup>

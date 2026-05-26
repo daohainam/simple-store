@@ -9,6 +9,8 @@
     <Project Path="src/SimpleStore.Gateway/SimpleStore.Gateway.csproj" />
     <Project Path="src/SimpleStore.Identity.API/SimpleStore.Identity.API.csproj" />
     <Project Path="src/SimpleStore.Identity.API.Client/SimpleStore.Identity.API.Client.csproj" />
+    <Project Path="src/SimpleStore.Inventory.API/SimpleStore.Inventory.API.csproj" />
+    <Project Path="src/SimpleStore.Inventory.API.Client/SimpleStore.Inventory.API.Client.csproj" />
     <Project Path="src/SimpleStore.Order.API/SimpleStore.Order.API.csproj" />
     <Project Path="src/SimpleStore.Order.API.Client/SimpleStore.Order.API.Client.csproj" />
     <Project Path="src/SimpleStore.Web/SimpleStore.Web.csproj" />
