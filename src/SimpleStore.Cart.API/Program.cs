@@ -1,5 +1,7 @@
+using MassTransit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using SimpleStore.Cart.API.Consumers;
 using SimpleStore.Cart.API.Endpoints;
 using SimpleStore.Cart.API.Services;
 
@@ -12,8 +14,23 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
 
 builder.AddRedisDistributedCache("cart-redis");
+// Also register the raw IConnectionMultiplexer (same Aspire resource) so RedisCartStore can SCAN
+// every cart key — needed by ProductUpdatedConsumer to fan out denormalized refreshes.
+builder.AddRedisClient("cart-redis");
 
 builder.Services.AddScoped<ICartStore, RedisCartStore>();
+
+// MassTransit + RabbitMQ. Cart.API only consumes — no DbContext, no outbox/inbox.
+// Duplicate delivery is harmless: ProductUpdatedConsumer rewrites the same denormalized fields.
+builder.Services.AddMassTransit(x =>
+{
+    x.AddConsumer<ProductUpdatedConsumer>();
+    x.UsingRabbitMq((ctx, cfg) =>
+    {
+        cfg.Host(new Uri(builder.Configuration.GetConnectionString("rabbitmq")!));
+        cfg.ConfigureEndpoints(ctx);
+    });
+});
 
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? string.Empty;
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? string.Empty;

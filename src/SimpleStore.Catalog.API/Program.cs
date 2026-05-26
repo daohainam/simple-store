@@ -1,6 +1,8 @@
+using MassTransit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using SimpleStore.Catalog.API;
+using SimpleStore.Catalog.API.Consumers;
 using SimpleStore.Catalog.API.Data;
 using SimpleStore.Catalog.API.Endpoints;
 using SimpleStore.Catalog.API.Services;
@@ -15,6 +17,24 @@ builder.AddServiceDefaults();
 builder.AddNpgsqlDbContext<CatalogDbContext>("catalogdb");
 
 builder.Services.AddScoped<ICatalogService, CatalogService>();
+
+// MassTransit + RabbitMQ. Catalog.API both publishes (ProductUpdatedEvent) and consumes
+// (OrderSubmittedEvent). EF Core outbox handles publish atomicity; inbox guards the consumer
+// against duplicate-delivery double-decrements of Product.Stock.
+builder.Services.AddMassTransit(x =>
+{
+    x.AddEntityFrameworkOutbox<CatalogDbContext>(o =>
+    {
+        o.UsePostgres();
+        o.UseBusOutbox();
+    });
+    x.AddConsumer<OrderSubmittedConsumer>();
+    x.UsingRabbitMq((ctx, cfg) =>
+    {
+        cfg.Host(new Uri(builder.Configuration.GetConnectionString("rabbitmq")!));
+        cfg.ConfigureEndpoints(ctx);
+    });
+});
 
 // JWT bearer — same Jwt:Issuer/Audience/Key as Identity.API (propagated by AppHost via env).
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? string.Empty;

@@ -15,4 +15,10 @@ public interface ICartStore
     /// and removes the source cart. No-op if the source cart is empty or missing.
     /// </summary>
     Task MergeAsync(string fromKey, string toKey, CancellationToken ct = default);
+
+    /// <summary>
+    /// Enumerates every cart owner key currently stored. SCAN-based fan-out used by event consumers
+    /// that need to touch carts containing a given product (see ProductUpdatedConsumer).
+    /// </summary>
+    IAsyncEnumerable<string> EnumerateOwnerKeysAsync(CancellationToken ct = default);
 }

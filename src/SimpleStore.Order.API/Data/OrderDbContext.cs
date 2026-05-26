@@ -1,3 +1,4 @@
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using OrderEntity = SimpleStore.Order.API.Models.Order;
 using OrderItem = SimpleStore.Order.API.Models.OrderItem;
@@ -27,5 +28,12 @@ public class OrderDbContext : DbContext
             e.Property(oi => oi.UnitPrice).HasPrecision(18, 2);
             e.Property(oi => oi.ProductName).HasMaxLength(200);
         });
+
+        // MassTransit transactional outbox: events published from OrderService are written
+        // to OutboxMessage in the same DB transaction as the order insert, then the bus
+        // delivers them asynchronously. Crash between save and deliver = no lost events.
+        builder.AddInboxStateEntity();
+        builder.AddOutboxMessageEntity();
+        builder.AddOutboxStateEntity();
     }
 }

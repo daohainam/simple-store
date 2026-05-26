@@ -1,3 +1,4 @@
+using MassTransit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using SimpleStore.Order.API;
@@ -15,6 +16,23 @@ builder.AddServiceDefaults();
 builder.AddNpgsqlDbContext<OrderDbContext>("orderdb");
 
 builder.Services.AddScoped<IOrderService, OrderService>();
+
+// MassTransit + RabbitMQ. Order.API only publishes (no consumers).
+// EF Core outbox: IPublishEndpoint.Publish writes to OutboxMessage table inside the same
+// DB transaction as the order; a hosted bus delivers from the outbox asynchronously.
+builder.Services.AddMassTransit(x =>
+{
+    x.AddEntityFrameworkOutbox<OrderDbContext>(o =>
+    {
+        o.UsePostgres();
+        o.UseBusOutbox();
+    });
+    x.UsingRabbitMq((ctx, cfg) =>
+    {
+        cfg.Host(new Uri(builder.Configuration.GetConnectionString("rabbitmq")!));
+        cfg.ConfigureEndpoints(ctx);
+    });
+});
 
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? string.Empty;
 var jwtAudience = builder.Configuration["Jwt:Audience"] ?? string.Empty;
