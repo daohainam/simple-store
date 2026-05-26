@@ -7,11 +7,11 @@ public static class OrderApiClientExtensions
 {
     /// <summary>
     /// Registers a typed <see cref="IOrderApiClient"/> resolved through Aspire service discovery.
-    /// The <paramref name="serviceName"/> must match the name used in AppHost.cs (default: "order").
+    /// The <paramref name="serviceName"/> must match the name used in AppHost.cs (default: "gateway" — the API gateway).
     /// </summary>
     public static IHttpClientBuilder AddOrderApiClient(
         this IHostApplicationBuilder builder,
-        string serviceName = "order")
+        string serviceName = "gateway")
     {
         return builder.Services.AddHttpClient<IOrderApiClient, OrderApiClient>(client =>
         {

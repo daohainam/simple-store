@@ -49,29 +49,35 @@ var cart = builder.AddProject<Projects.SimpleStore_Cart_API>("cart")
     .WithEnvironment("Jwt__Audience", jwtAudience)
     .WaitFor(cartRedis);
 
-var web = builder.AddProject<Projects.SimpleStore_Web>("web")
-    .WithReference(catalog)
+// YARP-based API gateway. The single entry point Web/Admin use to reach any backend service.
+// Routes /api/v1/<service>/* to the matching backend (path transform strips /v1/) and enforces
+// per-route JWT authorization at the edge.
+var gateway = builder.AddProject<Projects.SimpleStore_Gateway>("gateway")
     .WithReference(identity)
+    .WithReference(catalog)
     .WithReference(order)
     .WithReference(cart)
     .WithEnvironment("Jwt__Key", jwtKey)
     .WithEnvironment("Jwt__Issuer", jwtIssuer)
     .WithEnvironment("Jwt__Audience", jwtAudience)
-    .WaitFor(catalog)
     .WaitFor(identity)
+    .WaitFor(catalog)
     .WaitFor(order)
     .WaitFor(cart);
 
-// Admin has no cart UI; it only needs catalog/identity/order.
-var admin = builder.AddProject<Projects.SimpleStore_Admin>("admin")
-    .WithReference(catalog)
-    .WithReference(identity)
-    .WithReference(order)
+var web = builder.AddProject<Projects.SimpleStore_Web>("web")
+    .WithReference(gateway)
     .WithEnvironment("Jwt__Key", jwtKey)
     .WithEnvironment("Jwt__Issuer", jwtIssuer)
     .WithEnvironment("Jwt__Audience", jwtAudience)
-    .WaitFor(catalog)
-    .WaitFor(identity)
-    .WaitFor(order);
+    .WaitFor(gateway);
+
+// Admin has no cart UI; like Web, it only talks to the gateway.
+var admin = builder.AddProject<Projects.SimpleStore_Admin>("admin")
+    .WithReference(gateway)
+    .WithEnvironment("Jwt__Key", jwtKey)
+    .WithEnvironment("Jwt__Issuer", jwtIssuer)
+    .WithEnvironment("Jwt__Audience", jwtAudience)
+    .WaitFor(gateway);
 
 builder.Build().Run();

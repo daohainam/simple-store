@@ -7,11 +7,11 @@ public static class CatalogApiClientExtensions
 {
     /// <summary>
     /// Registers a typed <see cref="ICatalogApiClient"/> resolved through Aspire service discovery.
-    /// The <paramref name="serviceName"/> must match the name used in AppHost.cs (default: "catalog").
+    /// The <paramref name="serviceName"/> must match the name used in AppHost.cs (default: "gateway" — the API gateway).
     /// </summary>
     public static IHttpClientBuilder AddCatalogApiClient(
         this IHostApplicationBuilder builder,
-        string serviceName = "catalog")
+        string serviceName = "gateway")
     {
         return builder.Services.AddHttpClient<ICatalogApiClient, CatalogApiClient>(client =>
         {
