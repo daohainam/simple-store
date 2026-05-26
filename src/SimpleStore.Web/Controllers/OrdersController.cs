@@ -1,7 +1,8 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using SimpleStore.Web.Services;
+using SimpleStore.Cart.API.Client;
+using SimpleStore.Order.API.Client;
 using SimpleStore.Web.ViewModels;
 
 namespace SimpleStore.Web.Controllers;
@@ -9,10 +10,10 @@ namespace SimpleStore.Web.Controllers;
 [Authorize]
 public class OrdersController : Controller
 {
-    private readonly IOrderService _orders;
-    private readonly ICartService _cart;
+    private readonly IOrderApiClient _orders;
+    private readonly ICartApiClient _cart;
 
-    public OrdersController(IOrderService orders, ICartService cart)
+    public OrdersController(IOrderApiClient orders, ICartApiClient cart)
     {
         _orders = orders;
         _cart = cart;
@@ -20,28 +21,26 @@ public class OrdersController : Controller
 
     public async Task<IActionResult> Index()
     {
-        var userId = GetUserId();
-        var orders = await _orders.GetUserOrdersAsync(userId);
+        var orders = await _orders.GetMyOrdersAsync();
         return View(orders);
     }
 
     public async Task<IActionResult> Details(int id)
     {
-        var userId = GetUserId();
-        var order = await _orders.GetOrderByIdAsync(id, userId);
+        var order = await _orders.GetMyOrderByIdAsync(id);
         if (order == null) return NotFound();
         return View(order);
     }
 
     public async Task<IActionResult> Checkout()
     {
-        var items = await _cart.GetCartItemsAsync();
-        if (!items.Any()) return RedirectToAction("Index", "Cart");
+        var cart = await _cart.GetAsync();
+        if (cart.Items.Count == 0) return RedirectToAction("Index", "Cart");
 
         var model = new CheckoutViewModel
         {
-            CartItems = items,
-            Total = items.Sum(i => i.TotalPrice),
+            CartItems = cart.Items.ToList(),
+            Total = cart.Total,
             FullName = User.FindFirstValue("name") ?? string.Empty,
             Email = User.FindFirstValue("email") ?? string.Empty
         };
@@ -52,28 +51,38 @@ public class OrdersController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Checkout(CheckoutViewModel model)
     {
+        var cart = await _cart.GetAsync();
+
         if (!ModelState.IsValid)
         {
-            model.CartItems = await _cart.GetCartItemsAsync();
-            model.Total = model.CartItems.Sum(i => i.TotalPrice);
+            model.CartItems = cart.Items.ToList();
+            model.Total = cart.Total;
             return View(model);
         }
 
-        var userId = GetUserId();
-        var items = await _cart.GetCartItemsAsync();
-        var order = await _orders.CreateOrderAsync(userId, model.ShippingAddress, items);
-        await _cart.ClearCartAsync();
+        if (cart.Items.Count == 0) return RedirectToAction("Index", "Cart");
+
+        var request = new CreateOrderRequest
+        {
+            ShippingAddress = model.ShippingAddress,
+            Items = cart.Items.Select(i => new OrderItemDto
+            {
+                ProductId = i.ProductId,
+                ProductName = i.ProductName,
+                Quantity = i.Quantity,
+                UnitPrice = i.UnitPrice
+            }).ToList()
+        };
+
+        var order = await _orders.CreateOrderAsync(request);
+        await _cart.ClearAsync();
         return RedirectToAction("Confirmation", new { id = order.Id });
     }
 
     public async Task<IActionResult> Confirmation(int id)
     {
-        var userId = GetUserId();
-        var order = await _orders.GetOrderByIdAsync(id, userId);
+        var order = await _orders.GetMyOrderByIdAsync(id);
         if (order == null) return NotFound();
         return View(order);
     }
-
-    // JWT carries the user id as the "sub" claim; JwtBearer options set NameClaimType=sub.
-    private string GetUserId() => User.FindFirstValue("sub") ?? throw new InvalidOperationException("Missing sub claim.");
 }

@@ -1,6 +1,6 @@
 @page "/orders"
 @attribute [Authorize(Roles = "Admin")]
-@inject OrderDbContext OrderDb
+@inject IOrderApiClient OrderApi
 @inject IIdentityApiClient Identity
 
 <PageTitle>Orders</PageTitle>
@@ -94,26 +94,21 @@ else
             u => u.Id,
             u => string.IsNullOrWhiteSpace(u.FullName) ? u.Email : u.FullName);
 
-        var rows = await OrderDb.Orders
-            .AsNoTracking()
-            .Include(o => o.Items)
-            .OrderByDescending(o => o.OrderDate)
-            .Select(o => new OrderRow
+        // Pull a single page of orders; 100 is enough for the seeded dataset.
+        var paged = await OrderApi.GetOrdersAsync(page: 1, pageSize: 100);
+        foreach (var o in paged.Items)
+        {
+            orders.Add(new OrderRow
             {
                 Id = o.Id,
                 UserId = o.UserId,
+                CustomerLabel = userLabels.GetValueOrDefault(o.UserId, o.UserId),
                 OrderDate = o.OrderDate,
                 ItemCount = o.Items.Sum(i => i.Quantity),
                 TotalAmount = o.TotalAmount,
                 ShippingAddress = o.ShippingAddress,
                 Status = o.Status
-            })
-            .ToListAsync();
-
-        foreach (var row in rows)
-        {
-            row.CustomerLabel = userLabels.GetValueOrDefault(row.UserId, row.UserId);
-            orders.Add(row);
+            });
         }
 
         isLoading = false;
@@ -121,14 +116,7 @@ else
 
     private async Task SaveStatusAsync(OrderRow row)
     {
-        var order = await OrderDb.Orders.FirstOrDefaultAsync(o => o.Id == row.Id);
-        if (order is null)
-        {
-            return;
-        }
-
-        order.Status = row.Status;
-        await OrderDb.SaveChangesAsync();
+        await OrderApi.UpdateOrderStatusAsync(row.Id, row.Status);
         message = $"Order #{row.Id} updated to {row.Status}.";
     }
 

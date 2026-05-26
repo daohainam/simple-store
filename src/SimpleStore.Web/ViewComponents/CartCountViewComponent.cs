@@ -1,16 +1,16 @@
 using Microsoft.AspNetCore.Mvc;
-using SimpleStore.Web.Services;
+using SimpleStore.Cart.API.Client;
 
 namespace SimpleStore.Web.ViewComponents;
 
 public class CartCountViewComponent : ViewComponent
 {
-    private readonly ICartService _cart;
-    public CartCountViewComponent(ICartService cart) => _cart = cart;
+    private readonly ICartApiClient _cart;
+    public CartCountViewComponent(ICartApiClient cart) => _cart = cart;
 
     public async Task<IViewComponentResult> InvokeAsync()
     {
-        var count = await _cart.GetCartCountAsync();
+        var count = await _cart.GetCountAsync();
         return View(count);
     }
 }

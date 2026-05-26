@@ -2,7 +2,7 @@
 @attribute [Authorize(Roles = "Admin")]
 @inject ICatalogApiClient Catalog
 @inject IIdentityApiClient Identity
-@inject OrderDbContext OrderDb
+@inject IOrderApiClient Orders
 
 <PageTitle>Dashboard</PageTitle>
 
@@ -48,7 +48,7 @@ else
             <div class="card h-100">
                 <div class="card-body stat-card">
                     <p class="stat-label">Orders</p>
-                    <p class="stat-value">@orderCount</p>
+                    <p class="stat-value">@stats.TotalCount</p>
                 </div>
             </div>
         </div>
@@ -60,15 +60,15 @@ else
             <div class="row g-3">
                 <div class="col-md-4">
                     <p class="stat-label">Pending</p>
-                    <p class="stat-value" style="font-size:1.25rem;">@pendingOrders</p>
+                    <p class="stat-value" style="font-size:1.25rem;">@stats.PendingCount</p>
                 </div>
                 <div class="col-md-4">
                     <p class="stat-label">Completed</p>
-                    <p class="stat-value" style="font-size:1.25rem;">@completedOrders</p>
+                    <p class="stat-value" style="font-size:1.25rem;">@stats.CompletedCount</p>
                 </div>
                 <div class="col-md-4">
                     <p class="stat-label">Total revenue</p>
-                    <p class="stat-value" style="font-size:1.25rem;">@totalRevenue.ToString("C")</p>
+                    <p class="stat-value" style="font-size:1.25rem;">@stats.TotalRevenue.ToString("C")</p>
                 </div>
             </div>
         </div>
@@ -80,20 +80,14 @@ else
     private int customerCount;
     private int categoryCount;
     private int productCount;
-    private int orderCount;
-    private int pendingOrders;
-    private int completedOrders;
-    private decimal totalRevenue;
+    private OrderStatsDto stats = new();
 
     protected override async Task OnInitializedAsync()
     {
         customerCount = await Identity.GetUserCountAsync();
         categoryCount = await Catalog.GetCategoryCountAsync();
         productCount = await Catalog.GetProductCountAsync();
-        orderCount = await OrderDb.Orders.CountAsync();
-        pendingOrders = await OrderDb.Orders.CountAsync(o => o.Status == "Pending");
-        completedOrders = await OrderDb.Orders.CountAsync(o => o.Status == "Delivered");
-        totalRevenue = await OrderDb.Orders.SumAsync(o => (decimal?)o.TotalAmount) ?? 0m;
+        stats = await Orders.GetStatsAsync();
         isLoading = false;
     }
 }

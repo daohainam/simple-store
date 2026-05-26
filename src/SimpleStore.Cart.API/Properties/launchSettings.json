@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "SimpleStore.Cart.API": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:51035;http://localhost:51037"
+    }
+  }
+}

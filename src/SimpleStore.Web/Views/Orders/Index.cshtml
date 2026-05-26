@@ -1,4 +1,4 @@
-@model IEnumerable<SimpleStore.Data.Models.Order>
+@model IEnumerable<SimpleStore.Order.API.Client.OrderDto>
 @{
     ViewData["Title"] = "My Orders";
 }
@@ -33,7 +33,7 @@
                             <tr class="align-middle">
                                 <td><strong>#@order.Id</strong></td>
                                 <td>@order.OrderDate.ToString("MMM dd, yyyy")</td>
-                                <td>@order.Items.Count item(s)</td>
+                                <td>@order.Items.Count() item(s)</td>
                                 <td><strong>$@order.TotalAmount.ToString("N2")</strong></td>
                                 <td>
                                     <span class="badge @(order.Status == "Pending" ? "bg-warning text-dark" : "bg-success")">
