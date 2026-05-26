@@ -1,6 +1,8 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Distributed;
 using SimpleStore.Cart.API.Client;
+using StackExchange.Redis;
 
 namespace SimpleStore.Cart.API.Services;
 
@@ -11,9 +13,16 @@ public class RedisCartStore : ICartStore
         SlidingExpiration = TimeSpan.FromDays(30)
     };
 
-    private readonly IDistributedCache _cache;
+    private const string KeyPrefix = "cart:";
 
-    public RedisCartStore(IDistributedCache cache) => _cache = cache;
+    private readonly IDistributedCache _cache;
+    private readonly IConnectionMultiplexer _mux;
+
+    public RedisCartStore(IDistributedCache cache, IConnectionMultiplexer mux)
+    {
+        _cache = cache;
+        _mux = mux;
+    }
 
     public async Task<CartDto> GetAsync(string ownerKey, CancellationToken ct = default)
     {
@@ -107,6 +116,27 @@ public class RedisCartStore : ICartStore
         await _cache.RemoveAsync(KeyFor(fromKey), ct);
     }
 
+    /// <summary>
+    /// Enumerates every cart owner key in Redis via SCAN. Used by the ProductUpdatedConsumer to
+    /// find carts that may hold a freshly-updated product. Linear in number of carts — acceptable
+    /// while the key count is small/medium. If the cart count grows materially, switch to a
+    /// maintained reverse index (product:{id}:carts) instead.
+    /// </summary>
+    public async IAsyncEnumerable<string> EnumerateOwnerKeysAsync([EnumeratorCancellation] CancellationToken ct = default)
+    {
+        foreach (var endpoint in _mux.GetEndPoints())
+        {
+            var server = _mux.GetServer(endpoint);
+            // KeysAsync uses SCAN under the hood — non-blocking on the Redis server.
+            await foreach (var key in server.KeysAsync(pattern: KeyPrefix + "*").WithCancellation(ct))
+            {
+                var s = (string)key!;
+                if (s.StartsWith(KeyPrefix, StringComparison.Ordinal))
+                    yield return s.Substring(KeyPrefix.Length);
+            }
+        }
+    }
+
     private async Task<List<CartItemDto>> LoadItemsAsync(string ownerKey, CancellationToken ct)
     {
         var raw = await _cache.GetStringAsync(KeyFor(ownerKey), ct);
@@ -120,5 +150,5 @@ public class RedisCartStore : ICartStore
         return _cache.SetStringAsync(KeyFor(ownerKey), raw, EntryOptions, ct);
     }
 
-    private static string KeyFor(string ownerKey) => $"cart:{ownerKey}";
+    private static string KeyFor(string ownerKey) => KeyPrefix + ownerKey;
 }

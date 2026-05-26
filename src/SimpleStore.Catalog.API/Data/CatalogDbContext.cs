@@ -1,3 +1,4 @@
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using SimpleStore.Catalog.API.Models;
 
@@ -18,5 +19,11 @@ public class CatalogDbContext : DbContext
         {
             e.Property(p => p.Price).HasPrecision(18, 2);
         });
+
+        // MassTransit outbox (publish ProductUpdatedEvent) + inbox (idempotent consume of
+        // OrderSubmittedEvent — without this, a redelivered message would decrement Product.Stock twice).
+        builder.AddInboxStateEntity();
+        builder.AddOutboxMessageEntity();
+        builder.AddOutboxStateEntity();
     }
 }

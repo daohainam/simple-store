@@ -8,13 +8,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Aspire.StackExchange.Redis" Version="13.3.3" />
     <PackageReference Include="Aspire.StackExchange.Redis.DistributedCaching" Version="13.3.3" />
+    <PackageReference Include="MassTransit.RabbitMQ" Version="8.5.2" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.8" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.8" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\SimpleStore.Cart.API.Client\SimpleStore.Cart.API.Client.csproj" />
+    <ProjectReference Include="..\SimpleStore.Contracts\SimpleStore.Contracts.csproj" />
     <ProjectReference Include="..\SimpleStore.ServiceDefaults\SimpleStore.ServiceDefaults.csproj" />
   </ItemGroup>
 

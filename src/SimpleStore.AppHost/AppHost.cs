@@ -11,6 +11,12 @@ var identityDb = postgres.AddDatabase("identitydb");
 var cartRedis = builder.AddRedis("cart-redis")
     .WithRedisInsight();
 
+// RabbitMQ is the event bus for v6 (MassTransit). Management plugin gives a dev-only web UI.
+// Publishers: Order.API (OrderSubmittedEvent), Catalog.API (ProductUpdatedEvent).
+// Consumers: Catalog.API (OrderSubmittedEvent → decrement stock), Cart.API (ProductUpdatedEvent → refresh cart lines).
+var rabbitmq = builder.AddRabbitMQ("rabbitmq")
+    .WithManagementPlugin();
+
 // Shared JWT configuration: every service that issues OR validates tokens must agree on key + issuer + audience.
 var jwtKey = builder.AddParameter("jwt-key", secret: true);
 var jwtIssuer = builder.AddParameter("jwt-issuer");
@@ -25,29 +31,38 @@ var identity = builder.AddProject<Projects.SimpleStore_Identity_API>("identity")
     .WaitFor(identityDb);
 
 // Catalog runs as its own microservice and is the only resource that talks to catalogdb.
+// Publishes ProductUpdatedEvent and consumes OrderSubmittedEvent — both ride the rabbitmq bus.
 var catalog = builder.AddProject<Projects.SimpleStore_Catalog_API>("catalog")
     .WithReference(catalogDb)
+    .WithReference(rabbitmq)
     .WithEnvironment("Jwt__Key", jwtKey)
     .WithEnvironment("Jwt__Issuer", jwtIssuer)
     .WithEnvironment("Jwt__Audience", jwtAudience)
-    .WaitFor(catalogDb);
+    .WaitFor(catalogDb)
+    .WaitFor(rabbitmq);
 
 // Order runs as its own microservice and is the only resource that talks to orderdb.
+// Publishes OrderSubmittedEvent after checkout.
 var order = builder.AddProject<Projects.SimpleStore_Order_API>("order")
     .WithReference(orderDb)
+    .WithReference(rabbitmq)
     .WithEnvironment("Jwt__Key", jwtKey)
     .WithEnvironment("Jwt__Issuer", jwtIssuer)
     .WithEnvironment("Jwt__Audience", jwtAudience)
-    .WaitFor(orderDb);
+    .WaitFor(orderDb)
+    .WaitFor(rabbitmq);
 
 // Cart runs as its own Redis-backed microservice. Validates JWTs but allows anonymous calls
 // (anonymous carts identify via the X-Cart-Id header set by SimpleStore.Web).
+// Consumes ProductUpdatedEvent to refresh denormalized cart line items.
 var cart = builder.AddProject<Projects.SimpleStore_Cart_API>("cart")
     .WithReference(cartRedis)
+    .WithReference(rabbitmq)
     .WithEnvironment("Jwt__Key", jwtKey)
     .WithEnvironment("Jwt__Issuer", jwtIssuer)
     .WithEnvironment("Jwt__Audience", jwtAudience)
-    .WaitFor(cartRedis);
+    .WaitFor(cartRedis)
+    .WaitFor(rabbitmq);
 
 // YARP-based API gateway. The single entry point Web/Admin use to reach any backend service.
 // Routes /api/v1/<service>/* to the matching backend (path transform strips /v1/) and enforces

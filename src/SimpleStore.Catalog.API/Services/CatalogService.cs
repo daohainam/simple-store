@@ -1,7 +1,9 @@
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using SimpleStore.Catalog.API.Client;
 using SimpleStore.Catalog.API.Data;
 using SimpleStore.Catalog.API.Models;
+using SimpleStore.Contracts;
 
 namespace SimpleStore.Catalog.API.Services;
 
@@ -10,8 +12,13 @@ public class CatalogService : ICatalogService
     private const int MaxPageSize = 100;
 
     private readonly CatalogDbContext _context;
+    private readonly IPublishEndpoint _publishEndpoint;
 
-    public CatalogService(CatalogDbContext context) => _context = context;
+    public CatalogService(CatalogDbContext context, IPublishEndpoint publishEndpoint)
+    {
+        _context = context;
+        _publishEndpoint = publishEndpoint;
+    }
 
     // ---------- Products ----------
 
@@ -90,7 +97,30 @@ public class CatalogService : ICatalogService
         product.ImageUrl = dto.ImageUrl;
         product.CategoryId = dto.CategoryId;
 
+        // Persist + publish atomically: ProductUpdatedEvent is written to OutboxMessage in the same
+        // transaction as the product update. Cart.API consumes it to refresh denormalized line items.
+        // CategoryName is loaded separately because the consumer wants the same shape ProductDto has.
+        await using var tx = await _context.Database.BeginTransactionAsync(ct);
+
         await _context.SaveChangesAsync(ct);
+
+        await _context.Entry(product).Reference(p => p.Category).LoadAsync(ct);
+
+        await _publishEndpoint.Publish(new ProductUpdatedEvent
+        {
+            ProductId = product.Id,
+            Name = product.Name,
+            Description = product.Description,
+            Price = product.Price,
+            ImageUrl = product.ImageUrl,
+            Stock = product.Stock,
+            CategoryId = product.CategoryId,
+            CategoryName = product.Category?.Name ?? string.Empty
+        }, ct);
+
+        await _context.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+
         return true;
     }
 

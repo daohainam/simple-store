@@ -1,4 +1,6 @@
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using SimpleStore.Contracts;
 using SimpleStore.Order.API.Client;
 using SimpleStore.Order.API.Data;
 using OrderEntity = SimpleStore.Order.API.Models.Order;
@@ -11,8 +13,13 @@ public class OrderService : IOrderService
     private const int MaxPageSize = 100;
 
     private readonly OrderDbContext _context;
+    private readonly IPublishEndpoint _publishEndpoint;
 
-    public OrderService(OrderDbContext context) => _context = context;
+    public OrderService(OrderDbContext context, IPublishEndpoint publishEndpoint)
+    {
+        _context = context;
+        _publishEndpoint = publishEndpoint;
+    }
 
     public async Task<IReadOnlyList<OrderDto>> GetMyOrdersAsync(string userId, CancellationToken ct = default)
     {
@@ -51,8 +58,35 @@ public class OrderService : IOrderService
                 UnitPrice = i.UnitPrice
             }).ToList()
         };
+
+        // Insert the order first so EF assigns Id values to it and its OrderItems; that Id is what
+        // OrderSubmittedEvent carries to downstream consumers. The second SaveChangesAsync flushes
+        // the in-memory bus outbox into OutboxMessage. We wrap both in an explicit transaction so
+        // a crash between them cannot leave the order persisted without its event queued.
+        await using var tx = await _context.Database.BeginTransactionAsync(ct);
+
         _context.Orders.Add(order);
         await _context.SaveChangesAsync(ct);
+
+        await _publishEndpoint.Publish(new OrderSubmittedEvent
+        {
+            OrderId = order.Id,
+            UserId = order.UserId,
+            OrderDate = order.OrderDate,
+            TotalAmount = order.TotalAmount,
+            ShippingAddress = order.ShippingAddress,
+            Items = order.Items.Select(i => new OrderSubmittedLineItem
+            {
+                ProductId = i.ProductId,
+                ProductName = i.ProductName,
+                Quantity = i.Quantity,
+                UnitPrice = i.UnitPrice
+            }).ToList()
+        }, ct);
+
+        await _context.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+
         return ToDto(order);
     }
 
