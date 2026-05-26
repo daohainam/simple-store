@@ -3,8 +3,8 @@ using Microsoft.IdentityModel.Tokens;
 using SimpleStore.Admin.Components;
 using SimpleStore.Admin.Services.Auth;
 using SimpleStore.Catalog.API.Client;
-using SimpleStore.Data;
 using SimpleStore.Identity.API.Client;
+using SimpleStore.Order.API.Client;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,15 +17,13 @@ builder.Services.AddRazorComponents()
 // when handling form posts, so cookie write/clear has to happen in a classic Razor Page.
 builder.Services.AddRazorPages();
 
-// Orders admin still queries orderdb directly (Orders extraction is out of scope here).
-builder.AddNpgsqlDbContext<OrderDbContext>("orderdb");
-
-// HTTP clients for both microservices. Both attach BearerTokenHandler so admin calls
+// HTTP clients for each microservice. All three attach BearerTokenHandler so admin calls
 // carry the user's JWT — Identity.API needs it for /users admin endpoints, Catalog.API
-// needs it for write endpoints.
+// needs it for write endpoints, Order.API needs it for the admin order endpoints.
 builder.Services.AddTransient<BearerTokenHandler>();
 builder.AddCatalogApiClient().AddHttpMessageHandler<BearerTokenHandler>();
 builder.AddIdentityApiClient().AddHttpMessageHandler<BearerTokenHandler>();
+builder.AddOrderApiClient().AddHttpMessageHandler<BearerTokenHandler>();
 
 // JWT bearer — same Jwt:Issuer/Audience/Key as Identity.API. OnMessageReceived lifts
 // the token out of the server-side cache via ss_session cookie.

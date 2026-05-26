@@ -1,7 +1,7 @@
 @page "/customers"
 @attribute [Authorize(Roles = "Admin")]
 @inject IIdentityApiClient Identity
-@inject OrderDbContext OrderDb
+@inject IOrderApiClient OrderApi
 
 <PageTitle>Customers</PageTitle>
 
@@ -84,12 +84,8 @@ else
     {
         customers.Clear();
 
-        var orderCounts = await OrderDb.Orders
-            .GroupBy(o => o.UserId)
-            .Select(g => new { UserId = g.Key, Count = g.Count() })
-            .ToDictionaryAsync(x => x.UserId, x => x.Count);
-
-        // Single bulk fetch — pageSize=100 matches Identity.API's server-side clamp.
+        // Single bulk fetch from each service; dictionary-join in memory to avoid per-user round trips.
+        var orderCounts = await OrderApi.GetOrderCountsByUserAsync();
         var users = await Identity.GetUsersAsync(page: 1, pageSize: 100);
 
         foreach (var user in users.Items)

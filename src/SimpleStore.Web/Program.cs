@@ -1,27 +1,33 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using SimpleStore.Cart.API.Client;
 using SimpleStore.Catalog.API.Client;
-using SimpleStore.Data;
 using SimpleStore.Identity.API.Client;
-using SimpleStore.Web.Services;
+using SimpleStore.Order.API.Client;
 using SimpleStore.Web.Services.Auth;
+using SimpleStore.Web.Services.Cart;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 
-// Add services
 builder.Services.AddControllersWithViews();
 builder.Services.AddRazorPages();
 
-// Web no longer talks directly to identitydb — Identity.API owns it.
-builder.AddNpgsqlDbContext<OrderDbContext>("orderdb");
+// Cart-cookie infrastructure: anonymous browsers identify their cart with the ss_cart GUID;
+// the CartIdHandler stamps it on every outbound Cart.API call.
+builder.Services.AddScoped<CartCookieManager>();
+builder.Services.AddTransient<CartIdHandler>();
 
-// HTTP clients for both microservices. BearerTokenHandler stamps Authorization on outbound calls.
+// HTTP clients for each microservice. BearerTokenHandler stamps Authorization on outbound calls
+// (no-op when the caller is anonymous); CartIdHandler adds X-Cart-Id for anonymous cart access.
 builder.Services.AddTransient<BearerTokenHandler>();
 builder.AddCatalogApiClient().AddHttpMessageHandler<BearerTokenHandler>();
 builder.AddIdentityApiClient();
+builder.AddOrderApiClient().AddHttpMessageHandler<BearerTokenHandler>();
+builder.AddCartApiClient()
+    .AddHttpMessageHandler<BearerTokenHandler>()
+    .AddHttpMessageHandler<CartIdHandler>();
 
 // JWT bearer — tokens issued by Identity.API. OnMessageReceived lifts the JWT out of the
 // server-side session cache (browser only holds an opaque ss_session cookie).
@@ -93,21 +99,9 @@ builder.Services
 
 builder.Services.AddAuthorization();
 
-// Session-keyed cart + server-side JWT store both ride on the same IDistributedCache.
-builder.Services.AddSession(options =>
-{
-    options.IdleTimeout = TimeSpan.FromMinutes(30);
-    options.Cookie.HttpOnly = true;
-    options.Cookie.IsEssential = true;
-});
-
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITokenStore, DistributedCacheTokenStore>();
-
-// Register services
-builder.Services.AddScoped<ICartService, CartService>();
-builder.Services.AddScoped<IOrderService, OrderService>();
 
 var app = builder.Build();
 
@@ -122,16 +116,11 @@ if (!app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
-app.UseSession();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Migrate Order database (Identity migrates itself in SimpleStore.Identity.API; Catalog likewise).
-using (var scope = app.Services.CreateScope())
-{
-    var orderDb = scope.ServiceProvider.GetRequiredService<OrderDbContext>();
-    await orderDb.Database.MigrateAsync();
-}
+// Runs after authentication so the merge sees the just-logged-in user.
+app.UseMiddleware<CartMergeMiddleware>();
 
 app.MapControllerRoute(
     name: "default",

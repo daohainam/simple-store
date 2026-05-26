@@ -1,5 +1,5 @@
 using System.ComponentModel.DataAnnotations;
-using SimpleStore.Web.Services;
+using SimpleStore.Cart.API.Client;
 
 namespace SimpleStore.Web.ViewModels;
 
@@ -25,6 +25,6 @@ public class CheckoutViewModel
     [Display(Name = "Postal Code")]
     public string PostalCode { get; set; } = string.Empty;
 
-    public List<CartItem> CartItems { get; set; } = new();
+    public List<CartItemDto> CartItems { get; set; } = new();
     public decimal Total { get; set; }
 }

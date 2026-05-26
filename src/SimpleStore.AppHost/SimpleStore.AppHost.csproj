@@ -10,12 +10,15 @@
 
   <ItemGroup>
     <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.3.5" />
+    <PackageReference Include="Aspire.Hosting.Redis" Version="13.3.5" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\SimpleStore.Admin\SimpleStore.Admin.csproj" />
+    <ProjectReference Include="..\SimpleStore.Cart.API\SimpleStore.Cart.API.csproj" />
     <ProjectReference Include="..\SimpleStore.Catalog.API\SimpleStore.Catalog.API.csproj" />
     <ProjectReference Include="..\SimpleStore.Identity.API\SimpleStore.Identity.API.csproj" />
+    <ProjectReference Include="..\SimpleStore.Order.API\SimpleStore.Order.API.csproj" />
     <ProjectReference Include="..\SimpleStore.Web\SimpleStore.Web.csproj" />
   </ItemGroup>
 
