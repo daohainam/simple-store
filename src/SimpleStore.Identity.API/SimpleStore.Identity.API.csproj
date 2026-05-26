@@ -27,4 +27,8 @@
     <ProjectReference Include="..\SimpleStore.ServiceDefaults\SimpleStore.ServiceDefaults.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Migrations\" />
+  </ItemGroup>
+
 </Project>

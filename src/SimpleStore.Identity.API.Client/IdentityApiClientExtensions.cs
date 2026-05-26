@@ -7,11 +7,11 @@ public static class IdentityApiClientExtensions
 {
     /// <summary>
     /// Registers a typed <see cref="IIdentityApiClient"/> resolved through Aspire service discovery.
-    /// The <paramref name="serviceName"/> must match the name used in AppHost.cs (default: "identity").
+    /// The <paramref name="serviceName"/> must match the name used in AppHost.cs (default: "gateway" — the API gateway).
     /// </summary>
     public static IHttpClientBuilder AddIdentityApiClient(
         this IHostApplicationBuilder builder,
-        string serviceName = "identity")
+        string serviceName = "gateway")
     {
         return builder.Services.AddHttpClient<IIdentityApiClient, IdentityApiClient>(client =>
         {

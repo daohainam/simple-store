@@ -17,6 +17,7 @@
     <ProjectReference Include="..\SimpleStore.Admin\SimpleStore.Admin.csproj" />
     <ProjectReference Include="..\SimpleStore.Cart.API\SimpleStore.Cart.API.csproj" />
     <ProjectReference Include="..\SimpleStore.Catalog.API\SimpleStore.Catalog.API.csproj" />
+    <ProjectReference Include="..\SimpleStore.Gateway\SimpleStore.Gateway.csproj" />
     <ProjectReference Include="..\SimpleStore.Identity.API\SimpleStore.Identity.API.csproj" />
     <ProjectReference Include="..\SimpleStore.Order.API\SimpleStore.Order.API.csproj" />
     <ProjectReference Include="..\SimpleStore.Web\SimpleStore.Web.csproj" />
