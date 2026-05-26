@@ -6,6 +6,7 @@ var postgres = builder.AddPostgres("postgres")
 var catalogDb = postgres.AddDatabase("catalogdb");
 var orderDb = postgres.AddDatabase("orderdb");
 var identityDb = postgres.AddDatabase("identitydb");
+var inventoryDb = postgres.AddDatabase("inventorydb");
 
 // Cart.API stores its state in Redis; RedisInsight gives a dev-only UI.
 var cartRedis = builder.AddRedis("cart-redis")
@@ -16,6 +17,14 @@ var cartRedis = builder.AddRedis("cart-redis")
 // Consumers: Catalog.API (OrderSubmittedEvent → decrement stock), Cart.API (ProductUpdatedEvent → refresh cart lines).
 var rabbitmq = builder.AddRabbitMQ("rabbitmq")
     .WithManagementPlugin();
+
+// KurrentDB (formerly EventStoreDB) is the event store for SimpleStore.Inventory.API.
+// CommunityToolkit.Aspire.Hosting.KurrentDB v13.3.x ships an AddKurrentDB extension
+// that wraps the kurrentplatform/kurrentdb container, exposes the admin/gRPC port,
+// and injects a connection string named after the resource. Runs in insecure dev
+// mode by default — production hardening (TLS, ACLs) is out of scope for v7.
+var kurrentdb = builder.AddKurrentDB("kurrentdb")
+    .WithDataVolume("kurrentdb-data");
 
 // Shared JWT configuration: every service that issues OR validates tokens must agree on key + issuer + audience.
 var jwtKey = builder.AddParameter("jwt-key", secret: true);
@@ -64,6 +73,18 @@ var cart = builder.AddProject<Projects.SimpleStore_Cart_API>("cart")
     .WaitFor(cartRedis)
     .WaitFor(rabbitmq);
 
+// Inventory runs as its own microservice with an event-sourced write side (KurrentDB)
+// and a CQRS Postgres read side (inventorydb). v7 is standalone: no RabbitMQ wiring,
+// no Catalog/Order references. v8 will add a MassTransit consumer for OrderSubmittedEvent.
+var inventory = builder.AddProject<Projects.SimpleStore_Inventory_API>("inventory")
+    .WithReference(inventoryDb)
+    .WithReference(kurrentdb)
+    .WithEnvironment("Jwt__Key", jwtKey)
+    .WithEnvironment("Jwt__Issuer", jwtIssuer)
+    .WithEnvironment("Jwt__Audience", jwtAudience)
+    .WaitFor(inventoryDb)
+    .WaitFor(kurrentdb);
+
 // YARP-based API gateway. The single entry point Web/Admin use to reach any backend service.
 // Routes /api/v1/<service>/* to the matching backend (path transform strips /v1/) and enforces
 // per-route JWT authorization at the edge.
@@ -72,13 +93,15 @@ var gateway = builder.AddProject<Projects.SimpleStore_Gateway>("gateway")
     .WithReference(catalog)
     .WithReference(order)
     .WithReference(cart)
+    .WithReference(inventory)
     .WithEnvironment("Jwt__Key", jwtKey)
     .WithEnvironment("Jwt__Issuer", jwtIssuer)
     .WithEnvironment("Jwt__Audience", jwtAudience)
     .WaitFor(identity)
     .WaitFor(catalog)
     .WaitFor(order)
-    .WaitFor(cart);
+    .WaitFor(cart)
+    .WaitFor(inventory);
 
 var web = builder.AddProject<Projects.SimpleStore_Web>("web")
     .WithReference(gateway)
