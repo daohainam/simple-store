@@ -40,15 +40,15 @@ public static class CatalogEndpoints
             return dto is null ? Results.NotFound() : Results.Ok(dto);
         });
 
-        products.MapPost("", async (ProductDto dto, ICatalogService service, CancellationToken ct) =>
+        products.MapPost("", async (CreateProductRequest request, ICatalogService service, CancellationToken ct) =>
         {
-            var created = await service.CreateProductAsync(dto, ct);
+            var created = await service.CreateProductAsync(request, ct);
             return Results.Created($"/api/catalog/products/{created.Id}", created);
         }).RequireAuthorization("Admin");
 
-        products.MapPut("/{id:int}", async (int id, ProductDto dto, ICatalogService service, CancellationToken ct) =>
+        products.MapPut("/{id:int}", async (int id, UpdateProductRequest request, ICatalogService service, CancellationToken ct) =>
         {
-            var updated = await service.UpdateProductAsync(id, dto, ct);
+            var updated = await service.UpdateProductAsync(id, request, ct);
             return updated ? Results.NoContent() : Results.NotFound();
         }).RequireAuthorization("Admin");
 

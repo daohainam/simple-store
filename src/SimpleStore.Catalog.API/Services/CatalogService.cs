@@ -66,16 +66,19 @@ public class CatalogService : ICatalogService
     public Task<int> GetProductCountAsync(CancellationToken ct = default) =>
         _context.Products.CountAsync(ct);
 
-    public async Task<ProductDto> CreateProductAsync(ProductDto dto, CancellationToken ct = default)
+    public async Task<ProductDto> CreateProductAsync(CreateProductRequest request, CancellationToken ct = default)
     {
+        // Stock starts at 0 — Inventory.API is the source of truth. An admin establishes initial
+        // stock by issuing a receipt note in Inventory, which flows back here as a
+        // StockLevelChangedEvent and updates the cached Product.Stock.
         var product = new Product
         {
-            Name = dto.Name,
-            Description = dto.Description,
-            Price = dto.Price,
-            Stock = dto.Stock,
-            ImageUrl = dto.ImageUrl,
-            CategoryId = dto.CategoryId
+            Name = request.Name,
+            Description = request.Description,
+            Price = request.Price,
+            Stock = 0,
+            ImageUrl = request.ImageUrl,
+            CategoryId = request.CategoryId
         };
         _context.Products.Add(product);
         await _context.SaveChangesAsync(ct);
@@ -85,17 +88,18 @@ public class CatalogService : ICatalogService
         return ToDto(product);
     }
 
-    public async Task<bool> UpdateProductAsync(int id, ProductDto dto, CancellationToken ct = default)
+    public async Task<bool> UpdateProductAsync(int id, UpdateProductRequest request, CancellationToken ct = default)
     {
         var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == id, ct);
         if (product is null) return false;
 
-        product.Name = dto.Name;
-        product.Description = dto.Description;
-        product.Price = dto.Price;
-        product.Stock = dto.Stock;
-        product.ImageUrl = dto.ImageUrl;
-        product.CategoryId = dto.CategoryId;
+        // Stock is intentionally NOT updated here — it is owned by Inventory.API and refreshed via
+        // StockLevelChangedEvent.
+        product.Name = request.Name;
+        product.Description = request.Description;
+        product.Price = request.Price;
+        product.ImageUrl = request.ImageUrl;
+        product.CategoryId = request.CategoryId;
 
         // Persist + publish atomically: ProductUpdatedEvent is written to OutboxMessage in the same
         // transaction as the product update. Cart.API consumes it to refresh denormalized line items.

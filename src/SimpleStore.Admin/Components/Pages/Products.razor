@@ -7,7 +7,7 @@
 <header class="page-header">
     <div>
         <h1>Products</h1>
-        <p class="page-subtitle">Manage catalog items, pricing, and stock.</p>
+        <p class="page-subtitle">Manage catalog items and pricing. Stock is owned by Inventory.</p>
     </div>
 </header>
 
@@ -43,15 +43,10 @@
                     <InputTextArea class="form-control" rows="3" @bind-Value="form.Description" />
                 </div>
 
-                <div class="row g-2 mb-3">
-                    <div class="col-6">
-                        <label class="form-label">Price</label>
-                        <InputNumber class="form-control" @bind-Value="form.Price" />
-                    </div>
-                    <div class="col-6">
-                        <label class="form-label">Stock</label>
-                        <InputNumber class="form-control" @bind-Value="form.Stock" />
-                    </div>
+                <div class="mb-3">
+                    <label class="form-label">Price</label>
+                    <InputNumber class="form-control" @bind-Value="form.Price" />
+                    <div class="form-text">Stock is managed in Inventory (receipt / delivery notes), not here.</div>
                 </div>
 
                 <div class="mb-3">
@@ -179,7 +174,6 @@
         form.Name = row.Name;
         form.Description = row.Description;
         form.Price = row.Price;
-        form.Stock = row.Stock;
         form.ImageUrl = row.ImageUrl;
         form.CategoryId = row.CategoryId;
         message = null;
@@ -193,27 +187,33 @@
             return;
         }
 
-        var dto = new ProductDto
-        {
-            Name = form.Name.Trim(),
-            Description = form.Description.Trim(),
-            Price = form.Price,
-            Stock = form.Stock,
-            ImageUrl = string.IsNullOrWhiteSpace(form.ImageUrl) ? "/images/products/placeholder.jpg" : form.ImageUrl.Trim(),
-            CategoryId = form.CategoryId
-        };
+        var imageUrl = string.IsNullOrWhiteSpace(form.ImageUrl) ? "/images/products/placeholder.jpg" : form.ImageUrl.Trim();
 
         try
         {
             if (editingId is null)
             {
-                await Catalog.CreateProductAsync(dto);
-                message = "Product created.";
+                await Catalog.CreateProductAsync(new CreateProductRequest
+                {
+                    Name = form.Name.Trim(),
+                    Description = form.Description.Trim(),
+                    Price = form.Price,
+                    ImageUrl = imageUrl,
+                    CategoryId = form.CategoryId
+                });
+                message = "Product created. Set its stock by issuing a receipt note in Inventory.";
                 currentPage = 1;
             }
             else
             {
-                await Catalog.UpdateProductAsync(editingId.Value, dto);
+                await Catalog.UpdateProductAsync(editingId.Value, new UpdateProductRequest
+                {
+                    Name = form.Name.Trim(),
+                    Description = form.Description.Trim(),
+                    Price = form.Price,
+                    ImageUrl = imageUrl,
+                    CategoryId = form.CategoryId
+                });
                 message = "Product updated.";
             }
         }
@@ -249,7 +249,6 @@
         form.Name = string.Empty;
         form.Description = string.Empty;
         form.Price = 0m;
-        form.Stock = 0;
         form.ImageUrl = "/images/products/placeholder.jpg";
         form.CategoryId = 0;
     }
@@ -259,7 +258,6 @@
         public string Name { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
         public decimal Price { get; set; }
-        public int Stock { get; set; }
         public string ImageUrl { get; set; } = string.Empty;
         public int CategoryId { get; set; }
     }

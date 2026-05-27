@@ -13,10 +13,10 @@ public interface ICatalogService
     Task<CategoryDto?> GetCategoryByIdAsync(int id, CancellationToken ct = default);
     Task<int> GetCategoryCountAsync(CancellationToken ct = default);
 
-    // Writes
-    Task<ProductDto> CreateProductAsync(ProductDto dto, CancellationToken ct = default);
+    // Writes. Stock is NOT settable here — Inventory.API owns it (v8+).
+    Task<ProductDto> CreateProductAsync(CreateProductRequest request, CancellationToken ct = default);
     /// <summary>Returns false if the product was not found, true on success.</summary>
-    Task<bool> UpdateProductAsync(int id, ProductDto dto, CancellationToken ct = default);
+    Task<bool> UpdateProductAsync(int id, UpdateProductRequest request, CancellationToken ct = default);
     Task<bool> DeleteProductAsync(int id, CancellationToken ct = default);
 
     Task<CategoryDto> CreateCategoryAsync(CategoryDto dto, CancellationToken ct = default);

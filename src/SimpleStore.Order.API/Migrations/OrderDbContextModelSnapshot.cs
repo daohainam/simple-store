@@ -198,6 +198,9 @@ namespace SimpleStore.Order.API.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<Guid>("CorrelationId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime>("OrderDate")
                         .HasColumnType("timestamp with time zone");
 
@@ -218,6 +221,9 @@ namespace SimpleStore.Order.API.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CorrelationId")
+                        .IsUnique();
 
                     b.ToTable("Orders");
                 });

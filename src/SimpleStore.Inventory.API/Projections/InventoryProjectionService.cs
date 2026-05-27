@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SimpleStore.Inventory.API.Data;
 using SimpleStore.Inventory.API.Domain.DeliveryNotes.Events;
 using SimpleStore.Inventory.API.Domain.ReceiptNotes.Events;
+using SimpleStore.Inventory.API.Domain.Reservations.Events;
 using SimpleStore.Inventory.API.EventStore;
 using SimpleStore.Inventory.API.Projections.Checkpoints;
 
@@ -28,7 +29,7 @@ public sealed class InventoryProjectionService : BackgroundService
 {
     public const string ProjectionName = "inventory-read-model";
 
-    private static readonly string[] StreamPrefixes = ["deliveryNote-", "receiptNote-"];
+    private static readonly string[] StreamPrefixes = ["deliveryNote-", "receiptNote-", "reservation-"];
 
     private readonly IServiceScopeFactory _scopes;
     private readonly TimeProvider _clock;
@@ -104,10 +105,13 @@ public sealed class InventoryProjectionService : BackgroundService
         switch (envelope.DomainEvent)
         {
             case DeliveryNoteIssuedV1 issued:
-                await projector.ApplyDeliveryNoteIssuedAsync(issued, ct);
+                await projector.ApplyDeliveryNoteIssuedAsync(issued, envelope.IsLive, ct);
                 break;
             case ReceiptNoteRecordedV1 recorded:
-                await projector.ApplyReceiptNoteRecordedAsync(recorded, ct);
+                await projector.ApplyReceiptNoteRecordedAsync(recorded, envelope.IsLive, ct);
+                break;
+            case StockReservedV1 reserved:
+                await projector.ApplyStockReservedAsync(reserved, envelope.IsLive, ct);
                 break;
             default:
                 _log.LogWarning("Unhandled domain event {Type}.", envelope.DomainEvent.GetType().Name);

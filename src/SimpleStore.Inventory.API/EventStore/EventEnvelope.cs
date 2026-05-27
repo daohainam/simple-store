@@ -13,4 +13,9 @@ public sealed record EventEnvelope
     public required ReadOnlyMemory<byte> Data { get; init; }
     public EventStorePosition? Position { get; init; }
     public IInventoryDomainEvent? DomainEvent { get; init; }
+
+    // True once the $all subscription has caught up to the live tail. The projector uses this to
+    // suppress integration-event publishing during a cold-start replay (FromAll.Start), so wiping
+    // the read DB and replaying does NOT re-publish the entire history to RabbitMQ.
+    public bool IsLive { get; init; }
 }

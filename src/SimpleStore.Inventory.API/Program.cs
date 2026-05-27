@@ -1,9 +1,12 @@
 using KurrentDB.Client;
+using MassTransit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using SimpleStore.Inventory.API;
 using SimpleStore.Inventory.API.Application.DeliveryNotes;
 using SimpleStore.Inventory.API.Application.ReceiptNotes;
+using SimpleStore.Inventory.API.Application.Reservations;
+using SimpleStore.Inventory.API.Consumers;
 using SimpleStore.Inventory.API.Data;
 using SimpleStore.Inventory.API.Endpoints;
 using SimpleStore.Inventory.API.EventStore;
@@ -45,9 +48,30 @@ builder.Services.AddSingleton<IEventStore, KurrentEventStore>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<CreateDeliveryNoteHandler>();
 builder.Services.AddScoped<CreateReceiptNoteHandler>();
+builder.Services.AddScoped<CreateReservationHandler>();
 builder.Services.AddScoped<InventoryProjector>();
 builder.Services.AddScoped<CheckpointStore>();
 builder.Services.AddHostedService<InventoryProjectionService>();
+
+// --- MassTransit + RabbitMQ (v8) ----------------------------------------------
+// Inventory joins the bus in v8. It consumes ReserveStockRequestedEvent (checkout saga) and
+// publishes StockReservedEvent / StockReservationFailedEvent / StockLevelChangedEvent. The EF
+// bus outbox lets the async projector publish integration events inside the same Postgres
+// transaction as the read-model write (see InventoryProjectionService).
+builder.Services.AddMassTransit(x =>
+{
+    x.AddEntityFrameworkOutbox<InventoryReadDbContext>(o =>
+    {
+        o.UsePostgres();
+        o.UseBusOutbox();
+    });
+    x.AddConsumer<ReserveStockRequestedConsumer>();
+    x.UsingRabbitMq((ctx, cfg) =>
+    {
+        cfg.Host(new Uri(builder.Configuration.GetConnectionString("rabbitmq")!));
+        cfg.ConfigureEndpoints(ctx);
+    });
+});
 
 // --- JWT bearer (mirrors Order.API) -------------------------------------------
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? string.Empty;
@@ -102,7 +126,10 @@ app.MapInventoryEndpoints();
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<InventoryReadDbContext>();
-    await InventorySeeder.SeedAsync(context);
+    var eventStore = scope.ServiceProvider.GetRequiredService<IEventStore>();
+    var clock = scope.ServiceProvider.GetRequiredService<TimeProvider>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("InventorySeeder");
+    await InventorySeeder.SeedAsync(context, eventStore, clock, logger);
 }
 
 app.Run();

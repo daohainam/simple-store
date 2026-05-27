@@ -7,6 +7,7 @@ namespace SimpleStore.Contracts;
 /// </summary>
 public sealed record OrderSubmittedEvent
 {
+    public Guid CorrelationId { get; init; }
     public int OrderId { get; init; }
     public string UserId { get; init; } = string.Empty;
     public DateTime OrderDate { get; init; }

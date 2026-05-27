@@ -1,6 +1,7 @@
 using SimpleStore.Inventory.API.Domain;
 using SimpleStore.Inventory.API.Domain.DeliveryNotes.Events;
 using SimpleStore.Inventory.API.Domain.ReceiptNotes.Events;
+using SimpleStore.Inventory.API.Domain.Reservations.Events;
 
 namespace SimpleStore.Inventory.API.EventStore;
 
@@ -11,6 +12,7 @@ public sealed class EventTypeRegistry
 {
     public const string DeliveryNoteIssuedV1Type = "simplestore.inventory.delivery-note.issued.v1";
     public const string ReceiptNoteRecordedV1Type = "simplestore.inventory.receipt-note.recorded.v1";
+    public const string StockReservedV1Type = "simplestore.inventory.reservation.reserved.v1";
 
     private readonly Dictionary<Type, string> _clrToWire;
     private readonly Dictionary<string, Type> _wireToClr;
@@ -21,6 +23,7 @@ public sealed class EventTypeRegistry
         {
             [typeof(DeliveryNoteIssuedV1)] = DeliveryNoteIssuedV1Type,
             [typeof(ReceiptNoteRecordedV1)] = ReceiptNoteRecordedV1Type,
+            [typeof(StockReservedV1)] = StockReservedV1Type,
         };
         _wireToClr = _clrToWire.ToDictionary(kv => kv.Value, kv => kv.Key);
     }

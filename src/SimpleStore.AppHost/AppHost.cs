@@ -7,14 +7,18 @@ var catalogDb = postgres.AddDatabase("catalogdb");
 var orderDb = postgres.AddDatabase("orderdb");
 var identityDb = postgres.AddDatabase("identitydb");
 var inventoryDb = postgres.AddDatabase("inventorydb");
+var checkoutDb = postgres.AddDatabase("checkoutdb");
 
 // Cart.API stores its state in Redis; RedisInsight gives a dev-only UI.
 var cartRedis = builder.AddRedis("cart-redis")
     .WithRedisInsight();
 
-// RabbitMQ is the event bus for v6 (MassTransit). Management plugin gives a dev-only web UI.
-// Publishers: Order.API (OrderSubmittedEvent), Catalog.API (ProductUpdatedEvent).
-// Consumers: Catalog.API (OrderSubmittedEvent → decrement stock), Cart.API (ProductUpdatedEvent → refresh cart lines).
+// RabbitMQ is the event bus (MassTransit). Management plugin gives a dev-only web UI.
+// v8 flows: Order.API publishes OrderSubmittedEvent; Checkout.API (saga) consumes it and publishes
+// ReserveStockRequestedEvent; Inventory.API consumes that and publishes StockReserved /
+// StockReservationFailed / StockLevelChanged; Checkout.API consumes the reserve results and
+// publishes OrderConfirmed / OrderCancelled (Order.API consumes those); Catalog.API consumes
+// StockLevelChanged to refresh its cached Product.Stock, and ProductUpdatedEvent → Cart.API.
 var rabbitmq = builder.AddRabbitMQ("rabbitmq")
     .WithManagementPlugin();
 
@@ -74,16 +78,28 @@ var cart = builder.AddProject<Projects.SimpleStore_Cart_API>("cart")
     .WaitFor(rabbitmq);
 
 // Inventory runs as its own microservice with an event-sourced write side (KurrentDB)
-// and a CQRS Postgres read side (inventorydb). v7 is standalone: no RabbitMQ wiring,
-// no Catalog/Order references. v8 will add a MassTransit consumer for OrderSubmittedEvent.
+// and a CQRS Postgres read side (inventorydb). v8 wires it onto RabbitMQ: it consumes
+// ReserveStockRequestedEvent from the checkout saga and publishes StockReserved /
+// StockReservationFailed / StockLevelChanged. It is now the single source of truth for stock.
 var inventory = builder.AddProject<Projects.SimpleStore_Inventory_API>("inventory")
     .WithReference(inventoryDb)
     .WithReference(kurrentdb)
+    .WithReference(rabbitmq)
     .WithEnvironment("Jwt__Key", jwtKey)
     .WithEnvironment("Jwt__Issuer", jwtIssuer)
     .WithEnvironment("Jwt__Audience", jwtAudience)
     .WaitFor(inventoryDb)
-    .WaitFor(kurrentdb);
+    .WaitFor(kurrentdb)
+    .WaitFor(rabbitmq);
+
+// Checkout runs the MassTransit saga that orchestrates the create-order → reserve-stock →
+// confirm/cancel flow. Pure orchestrator: no HTTP surface, no JWT. Owns checkoutdb (saga state)
+// and rides RabbitMQ. Not referenced by the gateway (nothing calls it over HTTP).
+var checkout = builder.AddProject<Projects.SimpleStore_Checkout_API>("checkout")
+    .WithReference(checkoutDb)
+    .WithReference(rabbitmq)
+    .WaitFor(checkoutDb)
+    .WaitFor(rabbitmq);
 
 // YARP-based API gateway. The single entry point Web/Admin use to reach any backend service.
 // Routes /api/v1/<service>/* to the matching backend (path transform strips /v1/) and enforces

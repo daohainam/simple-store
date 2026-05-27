@@ -45,6 +45,7 @@ public class OrderService : IOrderService
     {
         var order = new OrderEntity
         {
+            CorrelationId = Guid.NewGuid(),
             UserId = userId,
             OrderDate = DateTime.UtcNow,
             ShippingAddress = request.ShippingAddress,
@@ -70,6 +71,7 @@ public class OrderService : IOrderService
 
         await _publishEndpoint.Publish(new OrderSubmittedEvent
         {
+            CorrelationId = order.CorrelationId,
             OrderId = order.Id,
             UserId = order.UserId,
             OrderDate = order.OrderDate,
@@ -144,6 +146,8 @@ public class OrderService : IOrderService
             {
                 TotalCount = g.Count(),
                 PendingCount = g.Sum(o => o.Status == "Pending" ? 1 : 0),
+                ConfirmedCount = g.Sum(o => o.Status == "Confirmed" ? 1 : 0),
+                CancelledCount = g.Sum(o => o.Status == "Cancelled" ? 1 : 0),
                 CompletedCount = g.Sum(o => o.Status == "Delivered" ? 1 : 0),
                 TotalRevenue = g.Sum(o => (decimal?)o.TotalAmount) ?? 0m
             })
@@ -155,6 +159,8 @@ public class OrderService : IOrderService
             {
                 TotalCount = grouped.TotalCount,
                 PendingCount = grouped.PendingCount,
+                ConfirmedCount = grouped.ConfirmedCount,
+                CancelledCount = grouped.CancelledCount,
                 CompletedCount = grouped.CompletedCount,
                 TotalRevenue = grouped.TotalRevenue
             };

@@ -23,9 +23,9 @@ public interface ICatalogApiClient
 
     Task<int> GetCategoryCountAsync(CancellationToken cancellationToken = default);
 
-    // Writes
-    Task<ProductDto> CreateProductAsync(ProductDto product, CancellationToken cancellationToken = default);
-    Task UpdateProductAsync(int id, ProductDto product, CancellationToken cancellationToken = default);
+    // Writes. Stock is owned by Inventory.API (v8+), so the write models omit it.
+    Task<ProductDto> CreateProductAsync(CreateProductRequest product, CancellationToken cancellationToken = default);
+    Task UpdateProductAsync(int id, UpdateProductRequest product, CancellationToken cancellationToken = default);
     Task DeleteProductAsync(int id, CancellationToken cancellationToken = default);
 
     Task<CategoryDto> CreateCategoryAsync(CategoryDto category, CancellationToken cancellationToken = default);

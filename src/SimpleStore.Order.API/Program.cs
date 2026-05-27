@@ -2,6 +2,7 @@ using MassTransit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using SimpleStore.Order.API;
+using SimpleStore.Order.API.Consumers;
 using SimpleStore.Order.API.Data;
 using SimpleStore.Order.API.Endpoints;
 using SimpleStore.Order.API.Services;
@@ -17,9 +18,11 @@ builder.AddNpgsqlDbContext<OrderDbContext>("orderdb");
 
 builder.Services.AddScoped<IOrderService, OrderService>();
 
-// MassTransit + RabbitMQ. Order.API only publishes (no consumers).
+// MassTransit + RabbitMQ. Order.API publishes OrderSubmittedEvent and consumes the saga's
+// OrderConfirmedEvent / OrderCancelledEvent to flip Order.Status.
 // EF Core outbox: IPublishEndpoint.Publish writes to OutboxMessage table inside the same
 // DB transaction as the order; a hosted bus delivers from the outbox asynchronously.
+// EF Core inbox makes the consumes exactly-once on retry.
 builder.Services.AddMassTransit(x =>
 {
     x.AddEntityFrameworkOutbox<OrderDbContext>(o =>
@@ -27,6 +30,8 @@ builder.Services.AddMassTransit(x =>
         o.UsePostgres();
         o.UseBusOutbox();
     });
+    x.AddConsumer<OrderConfirmedConsumer>();
+    x.AddConsumer<OrderCancelledConsumer>();
     x.UsingRabbitMq((ctx, cfg) =>
     {
         cfg.Host(new Uri(builder.Configuration.GetConnectionString("rabbitmq")!));
