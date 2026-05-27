@@ -118,11 +118,23 @@ Added an `Information`-level log that records the old stock value, new stock val
 
 ---
 
-### Saga timeout non-persistence documented in code
+---
 
-**File:** `src/SimpleStore.Checkout.API/Sagas/CheckoutSagaStateMachine.cs`
+## 4. Durable Saga Timeouts (Checkout.API)
 
-Added a comment at the class level explaining that `ReservationTimeout` uses the in-memory Quartz scheduler and does not survive a process restart. This information was already in `CLAUDE.md` and `docs/checkout-saga.md` but not at the call site where a developer would encounter it.
+**Problem:** The checkout saga's `ReservationTimeout` was scheduled on the **in-memory Quartz scheduler** (`RAMJobStore`). If Checkout.API restarted while a saga was in `AwaitingStock`, the scheduled timeout was lost from the process heap — the order could hang forever if Inventory never published a `StockReserved` / `StockReservationFailed` result.
+
+**Fix:** Switch Quartz from the in-memory store to a **persistent ADO store in `checkoutdb`**.
+
+**Files:**
+- `src/SimpleStore.Checkout.API/Program.cs` — `AddQuartz(q => q.UsePersistentStore(s => { s.UseProperties = true; s.UsePostgres(...); s.UseSystemTextJsonSerializer(); }))`, pointed at the `checkoutdb` connection string with the `qrtz_` table prefix.
+- `src/SimpleStore.Checkout.API/Data/CheckoutDbContextFactory.cs` *(new)* — `IDesignTimeDbContextFactory` so `dotnet ef migrations add` works without building the full host (Program.cs now requires the `checkoutdb` connection string at startup).
+- **Migration:** `AddQuartzTables` — raw Postgres DDL creating the `qrtz_*` schema (lowercase to match the configured prefix).
+- **Package:** `Quartz.Serialization.SystemTextJson` (3.15.0).
+
+**Result:** The trigger row lives in Postgres alongside the saga state. On restart, Quartz reloads pending triggers and immediately fires any that misfired while the process was down, so a saga left in `AwaitingStock` is still cancelled. The class-level comment in `CheckoutSagaStateMachine.cs` and `docs/checkout-saga.md` §11.2 are updated to reflect the durable behavior.
+
+> Single replica only. Running multiple Checkout.API instances would additionally require `s.UseClustering()` + a unique instance id so only one node fires each trigger.
 
 ---
 
@@ -133,5 +145,6 @@ Added a comment at the class level explaining that `ReservationTimeout` uses the
 | Catalog.API | `AddProductCategoryIndex` | Rename FK index; constrain Name/Description/ImageUrl/CategoryName columns |
 | Inventory.API | `AddStockMovementTypeIndex` | Add `(ProductId, MovementType)` index on `stock_movements` |
 | Order.API | `AddOrderStatusEnum` | Constrain Status/UserId/ShippingAddress columns |
+| Checkout.API | `AddQuartzTables` | Create Quartz `qrtz_*` persistent-store schema in `checkoutdb` |
 
-All column changes narrow `text` to bounded `varchar`. Existing seeded data is well within all limits.
+The Catalog/Inventory/Order column changes narrow `text` to bounded `varchar`. Existing seeded data is well within all limits. The Quartz tables are additive (new tables only).
