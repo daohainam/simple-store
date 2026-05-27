@@ -2,6 +2,7 @@ using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using SimpleStore.Contracts;
 using SimpleStore.Order.API.Data;
+using SimpleStore.Order.API.Models;
 
 namespace SimpleStore.Order.API.Consumers;
 
@@ -32,7 +33,7 @@ public sealed class OrderCancelledConsumer : IConsumer<OrderCancelledEvent>
             return;
         }
 
-        order.Status = "Cancelled";
+        order.Status = OrderStatus.Cancelled;
         await _context.SaveChangesAsync(context.CancellationToken);
         _log.LogInformation("Order {OrderId} cancelled. Reason: {Reason}", order.Id, msg.Reason);
     }

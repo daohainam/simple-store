@@ -18,6 +18,8 @@ public class CatalogDbContext : DbContext
         builder.Entity<Product>(e =>
         {
             e.Property(p => p.Price).HasPrecision(18, 2);
+            // Explicit index on the FK column so category-filtered product queries use an index scan.
+            e.HasIndex(p => p.CategoryId).HasDatabaseName("ix_products_category_id");
         });
 
         // MassTransit outbox (publish ProductUpdatedEvent) + inbox (idempotent consume of

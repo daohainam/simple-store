@@ -11,5 +11,17 @@ public sealed record StockLevelChangedEvent
     public int ProductId { get; init; }
     public int NewOnHand { get; init; }
     public DateTimeOffset ChangedAt { get; init; }
+    /// <summary>One of the <see cref="StockChangeCause"/> constants.</summary>
     public string Cause { get; init; } = string.Empty;
+}
+
+/// <summary>
+/// Well-known values for <see cref="StockLevelChangedEvent.Cause"/>. Use these constants on
+/// the publish side so the string never diverges between producer and consumer.
+/// </summary>
+public static class StockChangeCause
+{
+    public const string DeliveryNote = "DeliveryNote";
+    public const string ReceiptNote = "ReceiptNote";
+    public const string ReservationCreated = "ReservationCreated";
 }

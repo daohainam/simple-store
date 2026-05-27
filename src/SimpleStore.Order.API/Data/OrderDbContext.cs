@@ -1,5 +1,6 @@
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using SimpleStore.Order.API.Models;
 using OrderEntity = SimpleStore.Order.API.Models.Order;
 using OrderItem = SimpleStore.Order.API.Models.OrderItem;
 
@@ -21,6 +22,8 @@ public class OrderDbContext : DbContext
         builder.Entity<OrderEntity>(e =>
         {
             e.Property(o => o.TotalAmount).HasPrecision(18, 2);
+            // Store the enum as its name string so the column stays human-readable.
+            e.Property(o => o.Status).HasConversion<string>().HasMaxLength(16);
             // CorrelationId is the saga key — looked up on OrderConfirmedEvent / OrderCancelledEvent.
             e.HasIndex(o => o.CorrelationId).IsUnique();
         });

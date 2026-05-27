@@ -98,6 +98,9 @@ public class InventoryReadDbContext : DbContext
             e.HasIndex(x => new { x.ProductId, x.OccurredAt })
                 .HasDatabaseName("ix_stock_movements_product_occurred")
                 .IsDescending(false, true);
+            // Additional index to support queries filtered by movement type (e.g. reservations only).
+            e.HasIndex(x => new { x.ProductId, x.MovementType })
+                .HasDatabaseName("ix_stock_movements_product_type");
         });
 
         builder.Entity<ProjectionCheckpointRow>(e =>
