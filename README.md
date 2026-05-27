@@ -42,8 +42,10 @@ A **production-grade microservices reference architecture** built with **.NET 10
 │    API      │ │    API      │ │    API      │ │    API      │ │    API      │
 ├─────────────┤ ├─────────────┤ ├─────────────┤ ├─────────────┤ ├─────────────┤
 │ identitydb  │ │ catalogdb   │ │  orderdb    │ │ cart-redis  │ │ kurrentdb   │
-│ (Postgres)  │ │ (Postgres)  │ │ (Postgres)  │ │  (Redis)    │ │ inventorydb │
-└─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘
+│ (Postgres)  │ │ (Postgres)  │ │ (Postgres)  │ │  (Redis)    │ │  (write/ES) │
+└─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ │ inventorydb │
+                                                                 │  (read/CQRS)│
+                                                                 └─────────────┘
                                                                         │
        ┌────────────────────────────────────────────────────────────────┘
        │
@@ -399,19 +401,19 @@ Each EF Core DbContext is owned by its API project and **auto-migrates on startu
 
 ```pwsh
 # Catalog
-dotnet ef migrations add <Name> --project src/SimpleStore.Catalog.API \
+dotnet ef migrations add <Name> --project src/SimpleStore.Catalog.API `
   --startup-project src/SimpleStore.Catalog.API --context CatalogDbContext --output-dir Migrations
 
 # Identity
-dotnet ef migrations add <Name> --project src/SimpleStore.Identity.API \
+dotnet ef migrations add <Name> --project src/SimpleStore.Identity.API `
   --startup-project src/SimpleStore.Identity.API --context IdentityDbContext --output-dir Migrations
 
 # Orders
-dotnet ef migrations add <Name> --project src/SimpleStore.Order.API \
+dotnet ef migrations add <Name> --project src/SimpleStore.Order.API `
   --startup-project src/SimpleStore.Order.API --context OrderDbContext --output-dir Migrations
 
 # Inventory (read side only)
-dotnet ef migrations add <Name> --project src/SimpleStore.Inventory.API \
+dotnet ef migrations add <Name> --project src/SimpleStore.Inventory.API `
   --startup-project src/SimpleStore.Inventory.API --context InventoryReadDbContext --output-dir Migrations
 ```
 
