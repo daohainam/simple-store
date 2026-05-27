@@ -1,3 +1,4 @@
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using SimpleStore.Inventory.API.Data.ReadModels;
 
@@ -16,6 +17,8 @@ public class InventoryReadDbContext : DbContext
     public DbSet<DeliveryNoteLineRow> DeliveryNoteLines => Set<DeliveryNoteLineRow>();
     public DbSet<ReceiptNoteRow> ReceiptNotes => Set<ReceiptNoteRow>();
     public DbSet<ReceiptNoteLineRow> ReceiptNoteLines => Set<ReceiptNoteLineRow>();
+    public DbSet<ReservationRow> Reservations => Set<ReservationRow>();
+    public DbSet<ReservationLineRow> ReservationLines => Set<ReservationLineRow>();
     public DbSet<StockLevelRow> StockLevels => Set<StockLevelRow>();
     public DbSet<StockMovementRow> StockMovements => Set<StockMovementRow>();
     public DbSet<ProjectionCheckpointRow> ProjectionCheckpoints => Set<ProjectionCheckpointRow>();
@@ -60,6 +63,24 @@ public class InventoryReadDbContext : DbContext
             e.HasKey(x => new { x.ReceiptNoteId, x.LineNumber });
         });
 
+        builder.Entity<ReservationRow>(e =>
+        {
+            e.ToTable("reservations");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Status).HasMaxLength(16);
+            e.HasIndex(x => x.OrderId);
+            e.HasMany(x => x.Lines)
+                .WithOne()
+                .HasForeignKey(l => l.ReservationId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<ReservationLineRow>(e =>
+        {
+            e.ToTable("reservation_lines");
+            e.HasKey(x => new { x.ReservationId, x.LineNumber });
+        });
+
         builder.Entity<StockLevelRow>(e =>
         {
             e.ToTable("stock_levels");
@@ -85,5 +106,13 @@ public class InventoryReadDbContext : DbContext
             e.HasKey(x => x.ProjectionName);
             e.Property(x => x.ProjectionName).HasMaxLength(64);
         });
+
+        // MassTransit transactional outbox. v8 wires Inventory onto the bus: the projector
+        // publishes StockReservedEvent / StockLevelChangedEvent inside the same Postgres
+        // transaction as the read-model write, and the ReserveStockRequestedConsumer uses the
+        // inbox for exactly-once consumption.
+        builder.AddInboxStateEntity();
+        builder.AddOutboxMessageEntity();
+        builder.AddOutboxStateEntity();
     }
 }

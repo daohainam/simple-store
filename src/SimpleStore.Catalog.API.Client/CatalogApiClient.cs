@@ -57,14 +57,14 @@ public class CatalogApiClient : ICatalogApiClient
     public async Task<int> GetCategoryCountAsync(CancellationToken cancellationToken = default) =>
         await _http.GetFromJsonAsync<int>("api/v1/catalog/categories/count", cancellationToken);
 
-    public async Task<ProductDto> CreateProductAsync(ProductDto product, CancellationToken cancellationToken = default)
+    public async Task<ProductDto> CreateProductAsync(CreateProductRequest product, CancellationToken cancellationToken = default)
     {
         using var response = await _http.PostAsJsonAsync("api/v1/catalog/products", product, cancellationToken);
         response.EnsureSuccessStatusCode();
         return (await response.Content.ReadFromJsonAsync<ProductDto>(cancellationToken))!;
     }
 
-    public async Task UpdateProductAsync(int id, ProductDto product, CancellationToken cancellationToken = default)
+    public async Task UpdateProductAsync(int id, UpdateProductRequest product, CancellationToken cancellationToken = default)
     {
         using var response = await _http.PutAsJsonAsync($"api/v1/catalog/products/{id}", product, cancellationToken);
         response.EnsureSuccessStatusCode();

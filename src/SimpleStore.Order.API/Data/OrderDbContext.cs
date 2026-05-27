@@ -21,6 +21,8 @@ public class OrderDbContext : DbContext
         builder.Entity<OrderEntity>(e =>
         {
             e.Property(o => o.TotalAmount).HasPrecision(18, 2);
+            // CorrelationId is the saga key — looked up on OrderConfirmedEvent / OrderCancelledEvent.
+            e.HasIndex(o => o.CorrelationId).IsUnique();
         });
 
         builder.Entity<OrderItem>(e =>

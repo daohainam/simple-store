@@ -4,6 +4,7 @@
     <Project Path="src/SimpleStore.Cart.API/SimpleStore.Cart.API.csproj" />
     <Project Path="src/SimpleStore.Cart.API.Client/SimpleStore.Cart.API.Client.csproj" />
     <Project Path="src/SimpleStore.Catalog.API/SimpleStore.Catalog.API.csproj" />
+    <Project Path="src/SimpleStore.Checkout.API/SimpleStore.Checkout.API.csproj" />
     <Project Path="src/SimpleStore.Contracts/SimpleStore.Contracts.csproj" />
     <Project Path="src/SimpleStore.Catalog.API.Client/SimpleStore.Catalog.API.Client.csproj" />
     <Project Path="src/SimpleStore.Gateway/SimpleStore.Gateway.csproj" />

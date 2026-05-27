@@ -87,11 +87,20 @@ public sealed class KurrentEventStore : IEventStore
             filterOptions: filter,
             cancellationToken: ct);
 
+        // KurrentDB emits a CaughtUp marker once the subscription reaches the live tail. Before it,
+        // we are replaying history (cold start) and stamp IsLive=false so the projector suppresses
+        // integration-event publishing; after it, events are live and IsLive=true.
+        var caughtUp = false;
         await foreach (var message in subscription.Messages.WithCancellation(ct))
         {
-            if (message is StreamMessage.Event evt)
+            switch (message)
             {
-                yield return ToEnvelope(evt.ResolvedEvent);
+                case StreamMessage.Event evt:
+                    yield return ToEnvelope(evt.ResolvedEvent, caughtUp);
+                    break;
+                case StreamMessage.CaughtUp:
+                    caughtUp = true;
+                    break;
             }
         }
     }
@@ -111,11 +120,11 @@ public sealed class KurrentEventStore : IEventStore
 
         await foreach (var resolved in result.WithCancellation(ct))
         {
-            yield return ToEnvelope(resolved);
+            yield return ToEnvelope(resolved, isLive: false);
         }
     }
 
-    private EventEnvelope ToEnvelope(ResolvedEvent resolved)
+    private EventEnvelope ToEnvelope(ResolvedEvent resolved, bool isLive)
     {
         var data = resolved.Event.Data;
         IInventoryDomainEvent? domainEvent = null;
@@ -137,6 +146,7 @@ public sealed class KurrentEventStore : IEventStore
                 ? new EventStorePosition(p.CommitPosition, p.PreparePosition)
                 : null,
             DomainEvent = domainEvent,
+            IsLive = isLive,
         };
     }
 }

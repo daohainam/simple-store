@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "SimpleStore.Checkout.API": {
+      "commandName": "Project",
+      "launchBrowser": false,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:51042;http://localhost:51044"
+    }
+  }
+}

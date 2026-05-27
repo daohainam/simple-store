@@ -18,9 +18,9 @@ builder.AddNpgsqlDbContext<CatalogDbContext>("catalogdb");
 
 builder.Services.AddScoped<ICatalogService, CatalogService>();
 
-// MassTransit + RabbitMQ. Catalog.API both publishes (ProductUpdatedEvent) and consumes
-// (OrderSubmittedEvent). EF Core outbox handles publish atomicity; inbox guards the consumer
-// against duplicate-delivery double-decrements of Product.Stock.
+// MassTransit + RabbitMQ. Catalog.API publishes ProductUpdatedEvent and, in v8, consumes
+// StockLevelChangedEvent from Inventory.API to refresh the denormalized Product.Stock cache.
+// (The v7 OrderSubmittedConsumer that decremented stock directly is gone — Inventory owns stock now.)
 builder.Services.AddMassTransit(x =>
 {
     x.AddEntityFrameworkOutbox<CatalogDbContext>(o =>
@@ -28,7 +28,7 @@ builder.Services.AddMassTransit(x =>
         o.UsePostgres();
         o.UseBusOutbox();
     });
-    x.AddConsumer<OrderSubmittedConsumer>();
+    x.AddConsumer<StockLevelChangedConsumer>();
     x.UsingRabbitMq((ctx, cfg) =>
     {
         cfg.Host(new Uri(builder.Configuration.GetConnectionString("rabbitmq")!));
