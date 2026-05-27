@@ -90,7 +90,9 @@ public sealed class InventoryProjectionService : BackgroundService
             // Unknown event type — checkpoint past it but project nothing.
             // Lets us roll out v2 schemas without crashing the projector if
             // an older replica reads a newer event.
-            _log.LogWarning("Skipping unknown event type {Type}.", envelope.Type);
+            _log.LogWarning(
+                "Projector skipped unknown event type {EventType} at position {Position} in stream {Stream}.",
+                envelope.Type, envelope.Position?.ToString() ?? "unknown", envelope.StreamName);
             await CheckpointOnlyAsync(envelope, ct);
             return;
         }

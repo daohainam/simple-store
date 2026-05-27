@@ -2,6 +2,7 @@ using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using SimpleStore.Contracts;
 using SimpleStore.Inventory.API.Data;
+using static SimpleStore.Contracts.StockChangeCause;
 using SimpleStore.Inventory.API.Data.ReadModels;
 using SimpleStore.Inventory.API.Domain.DeliveryNotes.Events;
 using SimpleStore.Inventory.API.Domain.ReceiptNotes.Events;
@@ -67,13 +68,13 @@ public sealed class InventoryProjector
             {
                 ProductId = line.ProductId,
                 Delta = -line.Quantity,
-                MovementType = "DeliveryNote",
+                MovementType = DeliveryNote,
                 SourceNoteId = evt.NoteId,
                 OccurredAt = evt.IssuedAt,
             });
             var newOnHand = await UpsertStockLevelAsync(line.ProductId, -line.Quantity, evt.IssuedAt, ct);
             if (isLive)
-                await PublishStockLevelChangedAsync(line.ProductId, newOnHand, evt.IssuedAt, "DeliveryNote", ct);
+                await PublishStockLevelChangedAsync(line.ProductId, newOnHand, evt.IssuedAt, DeliveryNote, ct);
         }
     }
 
@@ -112,13 +113,13 @@ public sealed class InventoryProjector
             {
                 ProductId = line.ProductId,
                 Delta = line.Quantity,
-                MovementType = "ReceiptNote",
+                MovementType = ReceiptNote,
                 SourceNoteId = evt.NoteId,
                 OccurredAt = evt.RecordedAt,
             });
             var newOnHand = await UpsertStockLevelAsync(line.ProductId, line.Quantity, evt.RecordedAt, ct);
             if (isLive)
-                await PublishStockLevelChangedAsync(line.ProductId, newOnHand, evt.RecordedAt, "ReceiptNote", ct);
+                await PublishStockLevelChangedAsync(line.ProductId, newOnHand, evt.RecordedAt, ReceiptNote, ct);
         }
     }
 
@@ -157,13 +158,13 @@ public sealed class InventoryProjector
             {
                 ProductId = line.ProductId,
                 Delta = -line.Quantity,
-                MovementType = "Reservation",
+                MovementType = ReservationCreated,
                 SourceNoteId = evt.NoteId,
                 OccurredAt = evt.ReservedAt,
             });
             var newOnHand = await UpsertStockLevelAsync(line.ProductId, -line.Quantity, evt.ReservedAt, ct);
             if (isLive)
-                await PublishStockLevelChangedAsync(line.ProductId, newOnHand, evt.ReservedAt, "ReservationCreated", ct);
+                await PublishStockLevelChangedAsync(line.ProductId, newOnHand, evt.ReservedAt, ReservationCreated, ct);
         }
 
         if (isLive)

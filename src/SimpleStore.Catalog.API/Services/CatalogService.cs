@@ -155,7 +155,7 @@ public class CatalogService : ICatalogService
                 Id = c.Id,
                 Name = c.Name,
                 Description = c.Description,
-                ProductCount = c.Products.Count
+                ProductCount = c.Products.Count()
             })
             .ToListAsync(ct);
 
@@ -178,7 +178,7 @@ public class CatalogService : ICatalogService
                 Id = c.Id,
                 Name = c.Name,
                 Description = c.Description,
-                ProductCount = c.Products.Count
+                ProductCount = c.Products.Count()
             })
             .FirstOrDefaultAsync(ct);
         return category;

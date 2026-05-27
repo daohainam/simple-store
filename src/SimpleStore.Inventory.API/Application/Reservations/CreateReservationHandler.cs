@@ -45,10 +45,17 @@ public sealed class CreateReservationHandler
         _log = log;
     }
 
+    private const int MaxReservationLines = 100;
+
     public async Task HandleAsync(CreateReservationCommand cmd, CancellationToken ct)
     {
         if (cmd.Lines is null || cmd.Lines.Count == 0)
             throw new DomainException("A reservation must have at least one line.");
+        if (cmd.Lines.Count > MaxReservationLines)
+            throw new DomainException($"A reservation may not exceed {MaxReservationLines} lines.");
+        var invalidLine = cmd.Lines.FirstOrDefault(l => l.Quantity <= 0);
+        if (invalidLine is not null)
+            throw new DomainException($"Reservation line for product {invalidLine.ProductId} has invalid quantity {invalidLine.Quantity}.");
 
         var ids = cmd.Lines.Select(l => l.ProductId).Distinct().ToArray();
 

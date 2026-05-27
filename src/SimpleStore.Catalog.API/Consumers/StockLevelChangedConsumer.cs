@@ -40,7 +40,11 @@ public sealed class StockLevelChangedConsumer : IConsumer<StockLevelChangedEvent
             return;
         }
 
+        var oldStock = product.Stock;
         product.Stock = msg.NewOnHand;
         await _context.SaveChangesAsync(ct);
+        _logger.LogInformation(
+            "Product {ProductId} stock updated {OldStock} → {NewStock} (cause: {Cause})",
+            product.Id, oldStock, msg.NewOnHand, msg.Cause);
     }
 }

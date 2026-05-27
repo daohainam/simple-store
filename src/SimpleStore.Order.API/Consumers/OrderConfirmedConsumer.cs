@@ -2,11 +2,12 @@ using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using SimpleStore.Contracts;
 using SimpleStore.Order.API.Data;
+using SimpleStore.Order.API.Models;
 
 namespace SimpleStore.Order.API.Consumers;
 
 /// <summary>
-/// Consumed when the checkout saga finishes successfully. Flips Order.Status to "Confirmed"
+/// Consumed when the checkout saga finishes successfully. Flips Order.Status to Confirmed
 /// on the row matching CorrelationId. The MassTransit EF inbox makes the consume idempotent.
 /// </summary>
 public sealed class OrderConfirmedConsumer : IConsumer<OrderConfirmedEvent>
@@ -32,7 +33,8 @@ public sealed class OrderConfirmedConsumer : IConsumer<OrderConfirmedEvent>
             return;
         }
 
-        order.Status = "Confirmed";
+        order.Status = OrderStatus.Confirmed;
         await _context.SaveChangesAsync(context.CancellationToken);
+        _log.LogInformation("Order {OrderId} confirmed (correlation {CorrelationId})", order.Id, msg.CorrelationId);
     }
 }

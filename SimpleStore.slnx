@@ -1,19 +1,21 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/SimpleStore.Admin/SimpleStore.Admin.csproj" />
-    <Project Path="src/SimpleStore.Cart.API/SimpleStore.Cart.API.csproj" />
     <Project Path="src/SimpleStore.Cart.API.Client/SimpleStore.Cart.API.Client.csproj" />
-    <Project Path="src/SimpleStore.Catalog.API/SimpleStore.Catalog.API.csproj" />
-    <Project Path="src/SimpleStore.Checkout.API/SimpleStore.Checkout.API.csproj" />
-    <Project Path="src/SimpleStore.Contracts/SimpleStore.Contracts.csproj" />
+    <Project Path="src/SimpleStore.Cart.API/SimpleStore.Cart.API.csproj" />
     <Project Path="src/SimpleStore.Catalog.API.Client/SimpleStore.Catalog.API.Client.csproj" />
+    <Project Path="src/SimpleStore.Catalog.API/SimpleStore.Catalog.API.csproj" />
+    <Project Path="src/SimpleStore.Checkout.API/SimpleStore.Checkout.API.csproj">
+      <Build Solution="Debug|*" Project="false" />
+    </Project>
+    <Project Path="src/SimpleStore.Contracts/SimpleStore.Contracts.csproj" />
     <Project Path="src/SimpleStore.Gateway/SimpleStore.Gateway.csproj" />
-    <Project Path="src/SimpleStore.Identity.API/SimpleStore.Identity.API.csproj" />
     <Project Path="src/SimpleStore.Identity.API.Client/SimpleStore.Identity.API.Client.csproj" />
-    <Project Path="src/SimpleStore.Inventory.API/SimpleStore.Inventory.API.csproj" />
+    <Project Path="src/SimpleStore.Identity.API/SimpleStore.Identity.API.csproj" />
     <Project Path="src/SimpleStore.Inventory.API.Client/SimpleStore.Inventory.API.Client.csproj" />
-    <Project Path="src/SimpleStore.Order.API/SimpleStore.Order.API.csproj" />
+    <Project Path="src/SimpleStore.Inventory.API/SimpleStore.Inventory.API.csproj" />
     <Project Path="src/SimpleStore.Order.API.Client/SimpleStore.Order.API.Client.csproj" />
+    <Project Path="src/SimpleStore.Order.API/SimpleStore.Order.API.csproj" />
     <Project Path="src/SimpleStore.Web/SimpleStore.Web.csproj" />
   </Folder>
   <Project Path="src/SimpleStore.AppHost/SimpleStore.AppHost.csproj" Id="25d9c4d7-07ad-4d61-8b98-9f247c5df997" />

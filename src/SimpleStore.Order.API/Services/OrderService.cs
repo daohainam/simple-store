@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using SimpleStore.Contracts;
 using SimpleStore.Order.API.Client;
 using SimpleStore.Order.API.Data;
+using SimpleStore.Order.API.Models;
 using OrderEntity = SimpleStore.Order.API.Models.Order;
 using OrderItem = SimpleStore.Order.API.Models.OrderItem;
 
@@ -49,7 +50,7 @@ public class OrderService : IOrderService
             UserId = userId,
             OrderDate = DateTime.UtcNow,
             ShippingAddress = request.ShippingAddress,
-            Status = "Pending",
+            Status = OrderStatus.Pending,
             TotalAmount = request.Items.Sum(i => i.UnitPrice * i.Quantity),
             Items = request.Items.Select(i => new OrderItem
             {
@@ -129,9 +130,11 @@ public class OrderService : IOrderService
 
     public async Task<bool> UpdateStatusAsync(int id, string status, CancellationToken ct = default)
     {
+        if (!Enum.TryParse<OrderStatus>(status, ignoreCase: true, out var parsed))
+            return false;
         var order = await _context.Orders.FirstOrDefaultAsync(o => o.Id == id, ct);
         if (order is null) return false;
-        order.Status = status;
+        order.Status = parsed;
         await _context.SaveChangesAsync(ct);
         return true;
     }
@@ -145,10 +148,10 @@ public class OrderService : IOrderService
             .Select(g => new
             {
                 TotalCount = g.Count(),
-                PendingCount = g.Sum(o => o.Status == "Pending" ? 1 : 0),
-                ConfirmedCount = g.Sum(o => o.Status == "Confirmed" ? 1 : 0),
-                CancelledCount = g.Sum(o => o.Status == "Cancelled" ? 1 : 0),
-                CompletedCount = g.Sum(o => o.Status == "Delivered" ? 1 : 0),
+                PendingCount = g.Sum(o => o.Status == OrderStatus.Pending ? 1 : 0),
+                ConfirmedCount = g.Sum(o => o.Status == OrderStatus.Confirmed ? 1 : 0),
+                CancelledCount = g.Sum(o => o.Status == OrderStatus.Cancelled ? 1 : 0),
+                CompletedCount = g.Sum(o => o.Status == OrderStatus.Delivered ? 1 : 0),
                 TotalRevenue = g.Sum(o => (decimal?)o.TotalAmount) ?? 0m
             })
             .FirstOrDefaultAsync(ct);
@@ -189,7 +192,7 @@ public class OrderService : IOrderService
         UserId = o.UserId,
         OrderDate = o.OrderDate,
         TotalAmount = o.TotalAmount,
-        Status = o.Status,
+        Status = o.Status.ToString(),
         ShippingAddress = o.ShippingAddress,
         Items = o.Items.Select(i => new OrderItemDto
         {
