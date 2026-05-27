@@ -17,10 +17,31 @@ builder.AddServiceDefaults();
 
 builder.AddNpgsqlDbContext<CheckoutDbContext>("checkoutdb");
 
-// In-memory Quartz scheduler backs the saga's reservation timeout. No RabbitMQ delayed-exchange
-// plugin required (the standard broker image doesn't ship one). Trade-off: scheduled timeouts do
-// NOT survive a Checkout.API restart — acceptable for the sample (see docs/checkout-saga.md §11.2).
-builder.Services.AddQuartz();
+// Quartz backs the saga's reservation timeout. It uses a PERSISTENT ADO store in checkoutdb (the
+// qrtz_* tables, created by the AddQuartzTables migration) rather than the in-memory RAMJobStore,
+// so a scheduled timeout SURVIVES a Checkout.API restart: on boot Quartz reloads pending triggers
+// and immediately fires any that misfired while the process was down, cancelling stuck orders.
+// No RabbitMQ delayed-exchange plugin required. See docs/checkout-saga.md §11.2.
+var checkoutDbConnectionString = builder.Configuration.GetConnectionString("checkoutdb")
+    ?? throw new InvalidOperationException("Connection string 'checkoutdb' is required for the Quartz persistent store.");
+
+builder.Services.AddQuartz(q =>
+{
+    q.UsePersistentStore(s =>
+    {
+        // MassTransit's scheduling job stores its message payload as string properties in the
+        // JobDataMap, so UseProperties=true is both compatible and avoids object serialization there.
+        s.UseProperties = true;
+        // Lowercase table prefix matches the qrtz_* tables created by the migration and is robust
+        // regardless of whether the ADO delegate quotes identifiers (Postgres folds unquoted to lower).
+        s.UsePostgres(pg =>
+        {
+            pg.ConnectionString = checkoutDbConnectionString;
+            pg.TablePrefix = "qrtz_";
+        });
+        s.UseSystemTextJsonSerializer();
+    });
+});
 builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
 
 builder.Services.AddMassTransit(x =>
@@ -40,7 +61,8 @@ builder.Services.AddMassTransit(x =>
             r.UsePostgres();
         });
 
-    // Quartz-backed message scheduler (in-memory) used by the saga's Schedule(...) timeout.
+    // Quartz-backed message scheduler (persistent ADO store, see above) used by the saga's
+    // Schedule(...) timeout.
     x.AddQuartzConsumers();
     x.AddPublishMessageScheduler();
 
