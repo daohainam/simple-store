@@ -736,6 +736,8 @@ This keeps the sample simple, but scheduled timeouts do not survive a Checkout.A
 
 That is acceptable for a learning project, but it is a real production trade-off.
 
+> **Resolved in v8b** — Quartz was moved to a persistent ADO store in `checkoutdb`, so scheduled timeouts now survive a restart. See [v8b-durable-store-for-saga-timeouts.md](v8b-durable-store-for-saga-timeouts.md).
+
 #### 2. Inventory checks projected stock
 
 `SELECT ... FOR UPDATE` helps, but the comment in the handler documents a race window because stock is decremented asynchronously by the projector.
