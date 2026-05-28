@@ -21,6 +21,9 @@ builder.Services.AddTransient<CartIdHandler>();
 
 // HTTP clients for each microservice. BearerTokenHandler stamps Authorization on outbound calls
 // (no-op when the caller is anonymous); CartIdHandler adds X-Cart-Id for anonymous cart access.
+// v9: TokenRefreshCoordinator coalesces concurrent refresh-token rotations into a single network
+// call so rotate-on-use refresh tokens survive parallel page loads (singleton, app-wide).
+builder.Services.AddSingleton<TokenRefreshCoordinator>();
 builder.Services.AddTransient<BearerTokenHandler>();
 builder.AddCatalogApiClient().AddHttpMessageHandler<BearerTokenHandler>();
 builder.AddIdentityApiClient();

@@ -20,6 +20,8 @@ builder.Services.AddRazorPages();
 // HTTP clients for each microservice. All three attach BearerTokenHandler so admin calls
 // carry the user's JWT — Identity.API needs it for /users admin endpoints, Catalog.API
 // needs it for write endpoints, Order.API needs it for the admin order endpoints.
+// v9: TokenRefreshCoordinator coalesces concurrent refresh-token rotations.
+builder.Services.AddSingleton<TokenRefreshCoordinator>();
 builder.Services.AddTransient<BearerTokenHandler>();
 builder.AddCatalogApiClient().AddHttpMessageHandler<BearerTokenHandler>();
 builder.AddIdentityApiClient().AddHttpMessageHandler<BearerTokenHandler>();

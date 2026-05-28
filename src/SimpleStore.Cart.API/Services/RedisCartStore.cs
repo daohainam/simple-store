@@ -17,16 +17,22 @@ public class RedisCartStore : ICartStore
 
     private readonly IDistributedCache _cache;
     private readonly IConnectionMultiplexer _mux;
+    private readonly ILogger<RedisCartStore> _log;
 
-    public RedisCartStore(IDistributedCache cache, IConnectionMultiplexer mux)
+    public RedisCartStore(IDistributedCache cache, IConnectionMultiplexer mux, ILogger<RedisCartStore> log)
     {
         _cache = cache;
         _mux = mux;
+        _log = log;
     }
 
+    // v9: GET is the only operation that gracefully degrades on a Redis hiccup — returning an
+    // empty cart for a brief outage is preferable to surfacing a 500 to the storefront. All other
+    // operations (read-modify-write) propagate Redis exceptions so the global ExceptionHandlingMiddleware
+    // can turn them into a clean 503 — silently dropping items would risk losing the user's cart.
     public async Task<CartDto> GetAsync(string ownerKey, CancellationToken ct = default)
     {
-        var items = await LoadItemsAsync(ownerKey, ct);
+        var items = await TryLoadItemsAsync(ownerKey, ct);
         return new CartDto { Items = items };
     }
 
@@ -142,6 +148,29 @@ public class RedisCartStore : ICartStore
         var raw = await _cache.GetStringAsync(KeyFor(ownerKey), ct);
         if (string.IsNullOrEmpty(raw)) return new List<CartItemDto>();
         return JsonSerializer.Deserialize<List<CartItemDto>>(raw) ?? new List<CartItemDto>();
+    }
+
+    // v9: read-only path used by GetAsync — swallows Redis transient failures and returns an empty
+    // cart instead of throwing. Read-modify-write paths must NOT use this; they need to know the
+    // current state is unavailable so the surrounding write doesn't accidentally clobber the cart.
+    private async Task<List<CartItemDto>> TryLoadItemsAsync(string ownerKey, CancellationToken ct)
+    {
+        try
+        {
+            return await LoadItemsAsync(ownerKey, ct);
+        }
+        catch (RedisConnectionException ex)
+        {
+            _log.LogWarning(ex,
+                "Redis unreachable while loading cart {OwnerKey}; degrading to empty cart.", ownerKey);
+            return new List<CartItemDto>();
+        }
+        catch (RedisTimeoutException ex)
+        {
+            _log.LogWarning(ex,
+                "Redis timed out loading cart {OwnerKey}; degrading to empty cart.", ownerKey);
+            return new List<CartItemDto>();
+        }
     }
 
     private Task SaveItemsAsync(string ownerKey, List<CartItemDto> items, CancellationToken ct)

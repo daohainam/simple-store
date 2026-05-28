@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Quartz;
 using SimpleStore.Checkout.API.Data;
 using SimpleStore.Checkout.API.Sagas;
+using SimpleStore.ServiceDefaults;
 
 // SimpleStore.Checkout.API — v8 checkout saga orchestrator.
 //
@@ -15,7 +16,19 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 
-builder.AddNpgsqlDbContext<CheckoutDbContext>("checkoutdb");
+// v9: EF Core retry-on-failure for transient Postgres errors. See Identity.API/Program.cs for rationale.
+builder.AddNpgsqlDbContext<CheckoutDbContext>("checkoutdb",
+    configureSettings: settings =>
+    {
+        settings.DisableRetry = true;
+        settings.CommandTimeout = 30;
+    },
+    configureDbContextOptions: opt =>
+        opt.UseNpgsql(npgsql =>
+            npgsql.EnableRetryOnFailure(
+                maxRetryCount: 5,
+                maxRetryDelay: TimeSpan.FromSeconds(10),
+                errorCodesToAdd: null)));
 
 // Quartz backs the saga's reservation timeout. It uses a PERSISTENT ADO store in checkoutdb (the
 // qrtz_* tables, created by the AddQuartzTables migration) rather than the in-memory RAMJobStore,
@@ -68,8 +81,31 @@ builder.Services.AddMassTransit(x =>
 
     x.UsingRabbitMq((ctx, cfg) =>
     {
-        cfg.Host(new Uri(builder.Configuration.GetConnectionString("rabbitmq")!));
+        // v9: Rabbit heartbeat + MassTransit retry/CB. See Order.API/Program.cs for rationale.
+        // MassTransit applies UseMessageRetry to saga consumers automatically; the saga repository's
+        // pessimistic-concurrency row lock (set above) serializes concurrent dispatches per saga.
+        cfg.Host(new Uri(builder.Configuration.GetConnectionString("rabbitmq")!), h =>
+        {
+            h.Heartbeat(TimeSpan.FromSeconds(30));
+            h.RequestedConnectionTimeout(TimeSpan.FromSeconds(10));
+        });
+
         cfg.UsePublishMessageScheduler();
+
+        cfg.UseMessageRetry(r => r.Exponential(
+            retryLimit: 5,
+            minInterval: TimeSpan.FromSeconds(1),
+            maxInterval: TimeSpan.FromSeconds(30),
+            intervalDelta: TimeSpan.FromSeconds(2)));
+
+        cfg.UseCircuitBreaker(cb =>
+        {
+            cb.TrackingPeriod = TimeSpan.FromMinutes(1);
+            cb.TripThreshold = 15;
+            cb.ActiveThreshold = 10;
+            cb.ResetInterval = TimeSpan.FromMinutes(5);
+        });
+
         cfg.ConfigureEndpoints(ctx);
     });
 });
@@ -79,10 +115,11 @@ var app = builder.Build();
 app.MapDefaultEndpoints();
 
 // Migrate on startup. Checkout owns checkoutdb's schema (saga state + MassTransit outbox tables).
-using (var scope = app.Services.CreateScope())
+// v9: wrapped in StartupMigrationRunner — see Identity.API/Program.cs.
+await StartupMigrationRunner.RunAsync(app, async (sp, ct) =>
 {
-    var db = scope.ServiceProvider.GetRequiredService<CheckoutDbContext>();
-    await db.Database.MigrateAsync();
-}
+    var db = sp.GetRequiredService<CheckoutDbContext>();
+    await db.Database.MigrateAsync(ct);
+});
 
 app.Run();

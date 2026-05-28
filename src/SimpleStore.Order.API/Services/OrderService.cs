@@ -65,30 +65,40 @@ public class OrderService : IOrderService
         // OrderSubmittedEvent carries to downstream consumers. The second SaveChangesAsync flushes
         // the in-memory bus outbox into OutboxMessage. We wrap both in an explicit transaction so
         // a crash between them cannot leave the order persisted without its event queued.
-        await using var tx = await _context.Database.BeginTransactionAsync(ct);
-
-        _context.Orders.Add(order);
-        await _context.SaveChangesAsync(ct);
-
-        await _publishEndpoint.Publish(new OrderSubmittedEvent
+        //
+        // v9: the entire transaction runs inside an IExecutionStrategy so EF Core's retry-on-failure
+        // (configured in Program.cs) can replay the whole unit of work on a transient Postgres error
+        // — required because EnableRetryOnFailure forbids user-initiated transactions outside the
+        // strategy. The lambda is idempotent: EF re-issues SaveChanges with new identity values on
+        // each attempt, and the outbox row commits atomically with the order row.
+        var strategy = _context.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
         {
-            CorrelationId = order.CorrelationId,
-            OrderId = order.Id,
-            UserId = order.UserId,
-            OrderDate = order.OrderDate,
-            TotalAmount = order.TotalAmount,
-            ShippingAddress = order.ShippingAddress,
-            Items = order.Items.Select(i => new OrderSubmittedLineItem
-            {
-                ProductId = i.ProductId,
-                ProductName = i.ProductName,
-                Quantity = i.Quantity,
-                UnitPrice = i.UnitPrice
-            }).ToList()
-        }, ct);
+            await using var tx = await _context.Database.BeginTransactionAsync(ct);
 
-        await _context.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
+            _context.Orders.Add(order);
+            await _context.SaveChangesAsync(ct);
+
+            await _publishEndpoint.Publish(new OrderSubmittedEvent
+            {
+                CorrelationId = order.CorrelationId,
+                OrderId = order.Id,
+                UserId = order.UserId,
+                OrderDate = order.OrderDate,
+                TotalAmount = order.TotalAmount,
+                ShippingAddress = order.ShippingAddress,
+                Items = order.Items.Select(i => new OrderSubmittedLineItem
+                {
+                    ProductId = i.ProductId,
+                    ProductName = i.ProductName,
+                    Quantity = i.Quantity,
+                    UnitPrice = i.UnitPrice
+                }).ToList()
+            }, ct);
+
+            await _context.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        });
 
         return ToDto(order);
     }

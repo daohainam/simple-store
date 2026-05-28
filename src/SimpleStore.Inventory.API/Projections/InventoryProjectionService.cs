@@ -25,11 +25,22 @@ namespace SimpleStore.Inventory.API.Projections;
 // transaction means the projector re-receives the event on restart and the
 // per-event "have I seen this NoteId already?" guard in InventoryProjector
 // makes the re-apply a no-op.
+//
+// RESILIENCE (v9): the subscription is wrapped in an outer reconnect loop with
+// exponential backoff (1s → 30s). Any exception from KurrentDB (network drop,
+// gRPC deadline, server restart) or from the projection transaction is caught,
+// logged, and triggers a reconnect after the current backoff — the checkpoint
+// is reloaded from Postgres so we resume exactly where we left off. The
+// per-event apply runs inside EF Core's IExecutionStrategy so transient
+// Postgres errors retry the projection transaction without dropping the
+// subscription.
 public sealed class InventoryProjectionService : BackgroundService
 {
     public const string ProjectionName = "inventory-read-model";
 
     private static readonly string[] StreamPrefixes = ["deliveryNote-", "receiptNote-", "reservation-"];
+    private static readonly TimeSpan MinBackoff = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan MaxBackoff = TimeSpan.FromSeconds(30);
 
     private readonly IServiceScopeFactory _scopes;
     private readonly TimeProvider _clock;
@@ -52,6 +63,39 @@ public sealed class InventoryProjectionService : BackgroundService
         // gRPC endpoint may take a beat to accept connections.
         await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
 
+        var backoff = MinBackoff;
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                await RunSubscriptionLoopAsync(stoppingToken);
+                // Clean exit (subscription completed without throwing). Reset backoff before reconnecting.
+                backoff = MinBackoff;
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex,
+                    "Inventory projector subscription dropped; reconnecting in {BackoffSeconds}s.",
+                    backoff.TotalSeconds);
+                try
+                {
+                    await Task.Delay(backoff, stoppingToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                backoff = TimeSpan.FromSeconds(Math.Min(MaxBackoff.TotalSeconds, backoff.TotalSeconds * 2));
+            }
+        }
+    }
+
+    private async Task RunSubscriptionLoopAsync(CancellationToken stoppingToken)
+    {
         EventStorePosition? checkpoint;
         await using (var scope = _scopes.CreateAsyncScope())
         {
@@ -63,23 +107,14 @@ public sealed class InventoryProjectionService : BackgroundService
             "Inventory projector starting at {Position}.",
             checkpoint?.ToString() ?? "FromAll.Start (cold start / full replay)");
 
-        var eventStore = _scopes.CreateScope().ServiceProvider.GetRequiredService<IEventStore>();
+        using var eventStoreScope = _scopes.CreateScope();
+        var eventStore = eventStoreScope.ServiceProvider.GetRequiredService<IEventStore>();
 
         await foreach (var envelope in eventStore
             .SubscribeAllAsync(StreamPrefixes, checkpoint, stoppingToken)
             .WithCancellation(stoppingToken))
         {
-            try
-            {
-                await ApplyOneAsync(envelope, stoppingToken);
-            }
-            catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
-            {
-                _log.LogError(ex,
-                    "Failed to project event {Type} from stream {Stream}. Stopping projector to avoid silent data loss.",
-                    envelope.Type, envelope.StreamName);
-                throw;
-            }
+            await ApplyOneAsync(envelope, stoppingToken);
         }
     }
 
@@ -102,31 +137,39 @@ public sealed class InventoryProjectionService : BackgroundService
         var projector = scope.ServiceProvider.GetRequiredService<InventoryProjector>();
         var checkpoints = scope.ServiceProvider.GetRequiredService<CheckpointStore>();
 
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
-
-        switch (envelope.DomainEvent)
+        // v9: wrapped in IExecutionStrategy so the read-model write + checkpoint upsert can retry on
+        // a transient Postgres error without dropping the KurrentDB subscription. Re-applies are
+        // idempotent: InventoryProjector's per-aggregate "have I seen this Id already?" guards make
+        // every projection a no-op on the second pass, and the checkpoint upsert is monotonic.
+        var strategy = db.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
         {
-            case DeliveryNoteIssuedV1 issued:
-                await projector.ApplyDeliveryNoteIssuedAsync(issued, envelope.IsLive, ct);
-                break;
-            case ReceiptNoteRecordedV1 recorded:
-                await projector.ApplyReceiptNoteRecordedAsync(recorded, envelope.IsLive, ct);
-                break;
-            case StockReservedV1 reserved:
-                await projector.ApplyStockReservedAsync(reserved, envelope.IsLive, ct);
-                break;
-            default:
-                _log.LogWarning("Unhandled domain event {Type}.", envelope.DomainEvent.GetType().Name);
-                break;
-        }
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
 
-        if (envelope.Position is { } pos)
-        {
-            await checkpoints.UpsertAsync(ProjectionName, pos, _clock.GetUtcNow(), ct);
-        }
+            switch (envelope.DomainEvent)
+            {
+                case DeliveryNoteIssuedV1 issued:
+                    await projector.ApplyDeliveryNoteIssuedAsync(issued, envelope.IsLive, ct);
+                    break;
+                case ReceiptNoteRecordedV1 recorded:
+                    await projector.ApplyReceiptNoteRecordedAsync(recorded, envelope.IsLive, ct);
+                    break;
+                case StockReservedV1 reserved:
+                    await projector.ApplyStockReservedAsync(reserved, envelope.IsLive, ct);
+                    break;
+                default:
+                    _log.LogWarning("Unhandled domain event {Type}.", envelope.DomainEvent.GetType().Name);
+                    break;
+            }
 
-        await db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
+            if (envelope.Position is { } pos)
+            {
+                await checkpoints.UpsertAsync(ProjectionName, pos, _clock.GetUtcNow(), ct);
+            }
+
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        });
     }
 
     private async Task CheckpointOnlyAsync(EventEnvelope envelope, CancellationToken ct)
@@ -135,7 +178,12 @@ public sealed class InventoryProjectionService : BackgroundService
         await using var scope = _scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<InventoryReadDbContext>();
         var checkpoints = scope.ServiceProvider.GetRequiredService<CheckpointStore>();
-        await checkpoints.UpsertAsync(ProjectionName, pos, _clock.GetUtcNow(), ct);
-        await db.SaveChangesAsync(ct);
+
+        var strategy = db.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
+        {
+            await checkpoints.UpsertAsync(ProjectionName, pos, _clock.GetUtcNow(), ct);
+            await db.SaveChangesAsync(ct);
+        });
     }
 }
