@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using SimpleStore.Cart.API.Consumers;
 using SimpleStore.Cart.API.Endpoints;
+using SimpleStore.Cart.API.Middleware;
 using SimpleStore.Cart.API.Services;
 
 // Internal API on the Aspire network. Cart data lives in Redis ("cart-redis" resource).
@@ -27,7 +28,28 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<ProductUpdatedConsumer>();
     x.UsingRabbitMq((ctx, cfg) =>
     {
-        cfg.Host(new Uri(builder.Configuration.GetConnectionString("rabbitmq")!));
+        // v9: Rabbit heartbeat + MassTransit retry/CB. See Order.API/Program.cs for rationale.
+        // Cart has no DbContext/inbox so the consumer must remain idempotent (existing v6 design).
+        cfg.Host(new Uri(builder.Configuration.GetConnectionString("rabbitmq")!), h =>
+        {
+            h.Heartbeat(TimeSpan.FromSeconds(30));
+            h.RequestedConnectionTimeout(TimeSpan.FromSeconds(10));
+        });
+
+        cfg.UseMessageRetry(r => r.Exponential(
+            retryLimit: 5,
+            minInterval: TimeSpan.FromSeconds(1),
+            maxInterval: TimeSpan.FromSeconds(30),
+            intervalDelta: TimeSpan.FromSeconds(2)));
+
+        cfg.UseCircuitBreaker(cb =>
+        {
+            cb.TrackingPeriod = TimeSpan.FromMinutes(1);
+            cb.TripThreshold = 15;
+            cb.ActiveThreshold = 10;
+            cb.ResetInterval = TimeSpan.FromMinutes(5);
+        });
+
         cfg.ConfigureEndpoints(ctx);
     });
 });
@@ -69,6 +91,9 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
+
+// v9: turn Redis transient failures on cart write paths into a clean 503 instead of a 500.
+app.UseMiddleware<RedisExceptionMiddleware>();
 
 app.UseAuthentication();
 app.UseAuthorization();

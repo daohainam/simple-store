@@ -1,18 +1,35 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using SimpleStore.Identity.API;
 using SimpleStore.Identity.API.Data;
 using SimpleStore.Identity.API.Endpoints;
 using SimpleStore.Identity.API.Models;
 using SimpleStore.Identity.API.Services;
+using SimpleStore.ServiceDefaults;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 
-builder.AddNpgsqlDbContext<IdentityDbContext>("identitydb");
+// v9: EF Core retry-on-failure for transient Postgres errors (failover, restart, network hiccups).
+// We disable Aspire's built-in simple retry (settings.DisableRetry = true) and configure our own
+// exponential strategy via Npgsql — gives explicit control over retry count + max delay.
+// CommandTimeout caps how long a single SQL statement may run before timing out.
+builder.AddNpgsqlDbContext<IdentityDbContext>("identitydb",
+    configureSettings: settings =>
+    {
+        settings.DisableRetry = true;
+        settings.CommandTimeout = 30;
+    },
+    configureDbContextOptions: opt =>
+        opt.UseNpgsql(npgsql =>
+            npgsql.EnableRetryOnFailure(
+                maxRetryCount: 5,
+                maxRetryDelay: TimeSpan.FromSeconds(10),
+                errorCodesToAdd: null)));
 
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 {
@@ -87,12 +104,14 @@ app.UseAuthorization();
 app.MapIdentityEndpoints();
 
 // Migrate and seed on startup. The Identity service owns identitydb's schema.
-using (var scope = app.Services.CreateScope())
+// v9: wrapped in StartupMigrationRunner so a transient Postgres unreachability at boot retries
+// with bounded exponential backoff instead of crash-looping the container.
+await StartupMigrationRunner.RunAsync(app, async (sp, _) =>
 {
-    var context = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
-    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+    var context = sp.GetRequiredService<IdentityDbContext>();
+    var userManager = sp.GetRequiredService<UserManager<ApplicationUser>>();
+    var roleManager = sp.GetRequiredService<RoleManager<IdentityRole>>();
     await IdentitySeeder.SeedAsync(context, userManager, roleManager);
-}
+});
 
 app.Run();

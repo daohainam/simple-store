@@ -1,11 +1,13 @@
 using MassTransit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using SimpleStore.Catalog.API;
 using SimpleStore.Catalog.API.Consumers;
 using SimpleStore.Catalog.API.Data;
 using SimpleStore.Catalog.API.Endpoints;
 using SimpleStore.Catalog.API.Services;
+using SimpleStore.ServiceDefaults;
 
 // Internal API on the Aspire network. Reads are anonymous (storefront browsing);
 // writes require JWT-bearer auth with the "Admin" role — tokens are issued by SimpleStore.Identity.API.
@@ -14,7 +16,19 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 
-builder.AddNpgsqlDbContext<CatalogDbContext>("catalogdb");
+// v9: EF Core retry-on-failure for transient Postgres errors. See Identity.API/Program.cs for rationale.
+builder.AddNpgsqlDbContext<CatalogDbContext>("catalogdb",
+    configureSettings: settings =>
+    {
+        settings.DisableRetry = true;
+        settings.CommandTimeout = 30;
+    },
+    configureDbContextOptions: opt =>
+        opt.UseNpgsql(npgsql =>
+            npgsql.EnableRetryOnFailure(
+                maxRetryCount: 5,
+                maxRetryDelay: TimeSpan.FromSeconds(10),
+                errorCodesToAdd: null)));
 
 builder.Services.AddScoped<ICatalogService, CatalogService>();
 
@@ -31,7 +45,27 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<StockLevelChangedConsumer>();
     x.UsingRabbitMq((ctx, cfg) =>
     {
-        cfg.Host(new Uri(builder.Configuration.GetConnectionString("rabbitmq")!));
+        // v9: Rabbit heartbeat + MassTransit retry/CB. See Order.API/Program.cs for rationale.
+        cfg.Host(new Uri(builder.Configuration.GetConnectionString("rabbitmq")!), h =>
+        {
+            h.Heartbeat(TimeSpan.FromSeconds(30));
+            h.RequestedConnectionTimeout(TimeSpan.FromSeconds(10));
+        });
+
+        cfg.UseMessageRetry(r => r.Exponential(
+            retryLimit: 5,
+            minInterval: TimeSpan.FromSeconds(1),
+            maxInterval: TimeSpan.FromSeconds(30),
+            intervalDelta: TimeSpan.FromSeconds(2)));
+
+        cfg.UseCircuitBreaker(cb =>
+        {
+            cb.TrackingPeriod = TimeSpan.FromMinutes(1);
+            cb.TripThreshold = 15;
+            cb.ActiveThreshold = 10;
+            cb.ResetInterval = TimeSpan.FromMinutes(5);
+        });
+
         cfg.ConfigureEndpoints(ctx);
     });
 });
@@ -84,10 +118,11 @@ app.UseAuthorization();
 app.MapCatalogEndpoints();
 
 // Migrate and seed on startup. The Catalog service owns catalogdb's schema.
-using (var scope = app.Services.CreateScope())
+// v9: wrapped in StartupMigrationRunner — see Identity.API/Program.cs.
+await StartupMigrationRunner.RunAsync(app, async (sp, _) =>
 {
-    var context = scope.ServiceProvider.GetRequiredService<CatalogDbContext>();
+    var context = sp.GetRequiredService<CatalogDbContext>();
     await CatalogSeeder.SeedAsync(context);
-}
+});
 
 app.Run();

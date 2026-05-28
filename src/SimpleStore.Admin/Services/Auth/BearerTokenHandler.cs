@@ -3,16 +3,23 @@ using SimpleStore.Identity.API.Client;
 namespace SimpleStore.Admin.Services.Auth;
 
 // Outbound DelegatingHandler. Same pattern as Web — see Web/Services/Auth/BearerTokenHandler.cs.
+// v9: refresh calls are coalesced via TokenRefreshCoordinator (see that file's notes).
 public class BearerTokenHandler : DelegatingHandler
 {
     private readonly ITokenStore _tokens;
     private readonly IIdentityApiClient _identity;
+    private readonly TokenRefreshCoordinator _coordinator;
     private readonly ILogger<BearerTokenHandler> _logger;
 
-    public BearerTokenHandler(ITokenStore tokens, IIdentityApiClient identity, ILogger<BearerTokenHandler> logger)
+    public BearerTokenHandler(
+        ITokenStore tokens,
+        IIdentityApiClient identity,
+        TokenRefreshCoordinator coordinator,
+        ILogger<BearerTokenHandler> logger)
     {
         _tokens = tokens;
         _identity = identity;
+        _coordinator = coordinator;
         _logger = logger;
     }
 
@@ -36,16 +43,23 @@ public class BearerTokenHandler : DelegatingHandler
 
         try
         {
-            var rotated = await _identity.RefreshAsync(new RefreshRequest { RefreshToken = current.RefreshToken }, cancellationToken);
+            var rotated = await _coordinator.RefreshAsync(
+                current.RefreshToken,
+                () => _identity.RefreshAsync(new RefreshRequest { RefreshToken = current.RefreshToken }, CancellationToken.None));
             if (rotated is null) return null;
-            var next = new TokenSet
+
+            var latest = await _tokens.GetAsync(cancellationToken);
+            if (latest is null || string.Equals(latest.RefreshToken, current.RefreshToken, StringComparison.Ordinal))
             {
-                AccessToken = rotated.AccessToken,
-                RefreshToken = rotated.RefreshToken,
-                ExpiresAt = rotated.ExpiresAt
-            };
-            await _tokens.SetAsync(next, cancellationToken);
-            return next.AccessToken;
+                await _tokens.SetAsync(new TokenSet
+                {
+                    AccessToken = rotated.AccessToken,
+                    RefreshToken = rotated.RefreshToken,
+                    ExpiresAt = rotated.ExpiresAt
+                }, cancellationToken);
+                return rotated.AccessToken;
+            }
+            return latest.AccessToken;
         }
         catch (Exception ex)
         {

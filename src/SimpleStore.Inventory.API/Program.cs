@@ -1,6 +1,7 @@
 using KurrentDB.Client;
 using MassTransit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using SimpleStore.Inventory.API;
 using SimpleStore.Inventory.API.Application.DeliveryNotes;
@@ -10,8 +11,10 @@ using SimpleStore.Inventory.API.Consumers;
 using SimpleStore.Inventory.API.Data;
 using SimpleStore.Inventory.API.Endpoints;
 using SimpleStore.Inventory.API.EventStore;
+using SimpleStore.Inventory.API.Infrastructure;
 using SimpleStore.Inventory.API.Projections;
 using SimpleStore.Inventory.API.Projections.Checkpoints;
+using SimpleStore.ServiceDefaults;
 
 // SimpleStore.Inventory.API — v7 bounded context.
 //
@@ -27,7 +30,19 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
 
 // --- Read side: Postgres ------------------------------------------------------
-builder.AddNpgsqlDbContext<InventoryReadDbContext>("inventorydb");
+// v9: EF Core retry-on-failure for transient Postgres errors. See Identity.API/Program.cs for rationale.
+builder.AddNpgsqlDbContext<InventoryReadDbContext>("inventorydb",
+    configureSettings: settings =>
+    {
+        settings.DisableRetry = true;
+        settings.CommandTimeout = 30;
+    },
+    configureDbContextOptions: opt =>
+        opt.UseNpgsql(npgsql =>
+            npgsql.EnableRetryOnFailure(
+                maxRetryCount: 5,
+                maxRetryDelay: TimeSpan.FromSeconds(10),
+                errorCodesToAdd: null)));
 
 // --- Event store: KurrentDB ---------------------------------------------------
 // The AppHost injects ConnectionStrings:kurrentdb. We register the SDK's
@@ -43,6 +58,10 @@ builder.Services.AddSingleton<KurrentDBClient>(sp =>
 });
 builder.Services.AddSingleton<EventTypeRegistry>();
 builder.Services.AddSingleton<IEventStore, KurrentEventStore>();
+
+// v9: readiness probe for KurrentDB so /health flips to 503 when the event store is unreachable.
+builder.Services.AddHealthChecks()
+    .AddCheck<KurrentDbHealthCheck>("kurrentdb");
 
 // --- Application + projector --------------------------------------------------
 builder.Services.AddSingleton(TimeProvider.System);
@@ -68,7 +87,27 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<ReserveStockRequestedConsumer>();
     x.UsingRabbitMq((ctx, cfg) =>
     {
-        cfg.Host(new Uri(builder.Configuration.GetConnectionString("rabbitmq")!));
+        // v9: Rabbit heartbeat + MassTransit retry/CB. See Order.API/Program.cs for rationale.
+        cfg.Host(new Uri(builder.Configuration.GetConnectionString("rabbitmq")!), h =>
+        {
+            h.Heartbeat(TimeSpan.FromSeconds(30));
+            h.RequestedConnectionTimeout(TimeSpan.FromSeconds(10));
+        });
+
+        cfg.UseMessageRetry(r => r.Exponential(
+            retryLimit: 5,
+            minInterval: TimeSpan.FromSeconds(1),
+            maxInterval: TimeSpan.FromSeconds(30),
+            intervalDelta: TimeSpan.FromSeconds(2)));
+
+        cfg.UseCircuitBreaker(cb =>
+        {
+            cb.TrackingPeriod = TimeSpan.FromMinutes(1);
+            cb.TripThreshold = 15;
+            cb.ActiveThreshold = 10;
+            cb.ResetInterval = TimeSpan.FromMinutes(5);
+        });
+
         cfg.ConfigureEndpoints(ctx);
     });
 });
@@ -123,13 +162,14 @@ app.MapInventoryEndpoints();
 // Migrate on startup. The Inventory service owns inventorydb's schema. The projector
 // (BackgroundService) starts after the WebApplication is built and will replay from
 // FromAll.Start if projection_checkpoints is empty.
-using (var scope = app.Services.CreateScope())
+// v9: wrapped in StartupMigrationRunner — see Identity.API/Program.cs.
+await StartupMigrationRunner.RunAsync(app, async (sp, _) =>
 {
-    var context = scope.ServiceProvider.GetRequiredService<InventoryReadDbContext>();
-    var eventStore = scope.ServiceProvider.GetRequiredService<IEventStore>();
-    var clock = scope.ServiceProvider.GetRequiredService<TimeProvider>();
-    var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("InventorySeeder");
+    var context = sp.GetRequiredService<InventoryReadDbContext>();
+    var eventStore = sp.GetRequiredService<IEventStore>();
+    var clock = sp.GetRequiredService<TimeProvider>();
+    var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("InventorySeeder");
     await InventorySeeder.SeedAsync(context, eventStore, clock, logger);
-}
+});
 
 app.Run();

@@ -104,26 +104,34 @@ public class CatalogService : ICatalogService
         // Persist + publish atomically: ProductUpdatedEvent is written to OutboxMessage in the same
         // transaction as the product update. Cart.API consumes it to refresh denormalized line items.
         // CategoryName is loaded separately because the consumer wants the same shape ProductDto has.
-        await using var tx = await _context.Database.BeginTransactionAsync(ct);
-
-        await _context.SaveChangesAsync(ct);
-
-        await _context.Entry(product).Reference(p => p.Category).LoadAsync(ct);
-
-        await _publishEndpoint.Publish(new ProductUpdatedEvent
+        //
+        // v9: wrapped in IExecutionStrategy so EF Core's retry-on-failure can replay the whole unit
+        // of work on a transient Postgres error. SaveChanges + Publish + SaveChanges is idempotent
+        // because the second SaveChanges flushes the outbox row atomically with the product update.
+        var strategy = _context.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
         {
-            ProductId = product.Id,
-            Name = product.Name,
-            Description = product.Description,
-            Price = product.Price,
-            ImageUrl = product.ImageUrl,
-            Stock = product.Stock,
-            CategoryId = product.CategoryId,
-            CategoryName = product.Category?.Name ?? string.Empty
-        }, ct);
+            await using var tx = await _context.Database.BeginTransactionAsync(ct);
 
-        await _context.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
+            await _context.SaveChangesAsync(ct);
+
+            await _context.Entry(product).Reference(p => p.Category).LoadAsync(ct);
+
+            await _publishEndpoint.Publish(new ProductUpdatedEvent
+            {
+                ProductId = product.Id,
+                Name = product.Name,
+                Description = product.Description,
+                Price = product.Price,
+                ImageUrl = product.ImageUrl,
+                Stock = product.Stock,
+                CategoryId = product.CategoryId,
+                CategoryName = product.Category?.Name ?? string.Empty
+            }, ct);
+
+            await _context.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        });
 
         return true;
     }

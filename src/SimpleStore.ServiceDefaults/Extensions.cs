@@ -108,19 +108,26 @@ public static class Extensions
 
     public static WebApplication MapDefaultEndpoints(this WebApplication app)
     {
-        // Adding health checks endpoints to applications in non-development environments has security implications.
-        // See https://aka.ms/dotnet/aspire/healthchecks for details before enabling these endpoints in non-development environments.
-        if (app.Environment.IsDevelopment())
-        {
-            // All health checks must pass for app to be considered ready to accept traffic after starting
-            app.MapHealthChecks(HealthEndpointPath);
+        // v9: health endpoints are exposed in ALL environments so Aspire / k8s liveness + readiness
+        // probes work in production too, not just dev. The endpoints only leak per-dependency
+        // up/down state (no PII or stack traces) — auth-gating them is deferred to v10.
+        //
+        // /health  — readiness probe. Runs every registered check (including the dependency probes
+        //            auto-registered by Aspire's Npgsql/Redis components and MassTransit's bus check
+        //            plus our custom KurrentDB check in Inventory.API). Returns 503 if any dep is down,
+        //            telling the orchestrator to stop routing traffic but NOT to kill the container.
+        // /alive   — liveness probe. Runs only checks tagged "live" (just the trivial self-check).
+        //            Returns 200 as long as the process is responsive; never returns 503 just
+        //            because a downstream dependency is unreachable.
 
-            // Only health checks tagged with the "live" tag must pass for app to be considered alive
-            app.MapHealthChecks(AlivenessEndpointPath, new HealthCheckOptions
-            {
-                Predicate = r => r.Tags.Contains("live")
-            });
-        }
+        // All health checks must pass for app to be considered ready to accept traffic after starting
+        app.MapHealthChecks(HealthEndpointPath);
+
+        // Only health checks tagged with the "live" tag must pass for app to be considered alive
+        app.MapHealthChecks(AlivenessEndpointPath, new HealthCheckOptions
+        {
+            Predicate = r => r.Tags.Contains("live")
+        });
 
         return app;
     }

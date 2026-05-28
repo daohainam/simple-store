@@ -62,65 +62,75 @@ public sealed class CreateReservationHandler
         // Explicit transaction: the FOR UPDATE lock is held until we commit, serializing concurrent
         // reservation handlers. The publish on the failure path rides the same transaction's bus
         // outbox flush — identical pattern to OrderService.CreateOrderAsync.
-        await using var tx = await _readDb.Database.BeginTransactionAsync(ct);
-
-        var levels = await _readDb.StockLevels
-            .FromSqlInterpolated($"SELECT * FROM stock_levels WHERE \"ProductId\" = ANY({ids}) FOR UPDATE")
-            .ToDictionaryAsync(s => s.ProductId, ct);
-
-        var shortages = new List<ShortageLine>();
-        foreach (var line in cmd.Lines)
+        //
+        // v9: wrapped in IExecutionStrategy so EF Core's retry-on-failure can replay the whole unit
+        // of work on a transient Postgres error. Each retry re-acquires the FOR UPDATE lock with a
+        // fresh transaction; the KurrentDB AppendAsync inside is idempotent because the deterministic
+        // ReservationId collapses retries onto the same stream and ConcurrencyConflictException is
+        // already handled as a no-op success (saga retry semantics from v8).
+        var strategy = _readDb.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
         {
-            var onHand = levels.TryGetValue(line.ProductId, out var lvl) ? lvl.OnHand : 0;
-            if (onHand < line.Quantity)
-                shortages.Add(new ShortageLine
-                {
-                    ProductId = line.ProductId,
-                    Requested = line.Quantity,
-                    Available = onHand
-                });
-        }
+            await using var tx = await _readDb.Database.BeginTransactionAsync(ct);
 
-        if (shortages.Count > 0)
-        {
-            await _publishEndpoint.Publish(new StockReservationFailedEvent
+            var levels = await _readDb.StockLevels
+                .FromSqlInterpolated($"SELECT * FROM stock_levels WHERE \"ProductId\" = ANY({ids}) FOR UPDATE")
+                .ToDictionaryAsync(s => s.ProductId, ct);
+
+            var shortages = new List<ShortageLine>();
+            foreach (var line in cmd.Lines)
             {
-                CorrelationId = cmd.CorrelationId,
-                ReservationId = cmd.ReservationId,
-                OrderId = cmd.OrderId,
-                Reason = "InsufficientStock",
-                ShortageLines = shortages,
-                FailedAt = _clock.GetUtcNow()
-            }, ct);
-            await _readDb.SaveChangesAsync(ct); // flush the bus outbox in this transaction
+                var onHand = levels.TryGetValue(line.ProductId, out var lvl) ? lvl.OnHand : 0;
+                if (onHand < line.Quantity)
+                    shortages.Add(new ShortageLine
+                    {
+                        ProductId = line.ProductId,
+                        Requested = line.Quantity,
+                        Available = onHand
+                    });
+            }
+
+            if (shortages.Count > 0)
+            {
+                await _publishEndpoint.Publish(new StockReservationFailedEvent
+                {
+                    CorrelationId = cmd.CorrelationId,
+                    ReservationId = cmd.ReservationId,
+                    OrderId = cmd.OrderId,
+                    Reason = "InsufficientStock",
+                    ShortageLines = shortages,
+                    FailedAt = _clock.GetUtcNow()
+                }, ct);
+                await _readDb.SaveChangesAsync(ct); // flush the bus outbox in this transaction
+                await tx.CommitAsync(ct);
+                _log.LogInformation(
+                    "Reservation {ReservationId} for order {OrderId} rejected — insufficient stock on {Count} line(s).",
+                    cmd.ReservationId, cmd.OrderId, shortages.Count);
+                return;
+            }
+
+            var domainLines = cmd.Lines.Select(l => new InventoryLine(l.ProductId, l.Quantity)).ToList();
+            var reservation = Reservation.Reserve(
+                cmd.ReservationId, cmd.CorrelationId, cmd.OrderId, domainLines, _clock.GetUtcNow());
+
+            try
+            {
+                await _eventStore.AppendAsync(
+                    $"reservation-{reservation.Id}", reservation.UncommittedEvents, AppendCondition.NoStream, ct);
+            }
+            catch (ConcurrencyConflictException)
+            {
+                // Saga retry: this ReservationId already exists in the event store. The original
+                // StockReservedV1 was (or will be) projected and StockReservedEvent published, so the
+                // saga already got (or will get) its answer. Treat the retry as a no-op success.
+                await tx.CommitAsync(ct);
+                _log.LogInformation(
+                    "Reservation {ReservationId} already exists — treating redelivery as success.", cmd.ReservationId);
+                return;
+            }
+
+            await _readDb.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
-            _log.LogInformation(
-                "Reservation {ReservationId} for order {OrderId} rejected — insufficient stock on {Count} line(s).",
-                cmd.ReservationId, cmd.OrderId, shortages.Count);
-            return;
-        }
-
-        var domainLines = cmd.Lines.Select(l => new InventoryLine(l.ProductId, l.Quantity)).ToList();
-        var reservation = Reservation.Reserve(
-            cmd.ReservationId, cmd.CorrelationId, cmd.OrderId, domainLines, _clock.GetUtcNow());
-
-        try
-        {
-            await _eventStore.AppendAsync(
-                $"reservation-{reservation.Id}", reservation.UncommittedEvents, AppendCondition.NoStream, ct);
-        }
-        catch (ConcurrencyConflictException)
-        {
-            // Saga retry: this ReservationId already exists in the event store. The original
-            // StockReservedV1 was (or will be) projected and StockReservedEvent published, so the
-            // saga already got (or will get) its answer. Treat the retry as a no-op success.
-            await tx.CommitAsync(ct);
-            _log.LogInformation(
-                "Reservation {ReservationId} already exists — treating redelivery as success.", cmd.ReservationId);
-            return;
-        }
-
-        await _readDb.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
+        });
     }
 }
