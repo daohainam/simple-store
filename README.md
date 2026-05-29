@@ -1,8 +1,8 @@
 # SimpleStore
 
-A **production-grade microservices reference architecture** built with **.NET 10**, **.NET Aspire**, **Entity Framework Core**, **PostgreSQL**, **Redis**, **RabbitMQ**, and **KurrentDB**. Designed as a progressive learning resource for developers studying microservices patterns, this e-commerce platform demonstrates how to evolve from a monolith into a fully distributed system with proper service boundaries, event-driven communication, saga orchestration, and CQRS/Event Sourcing.
+A **production-grade microservices reference architecture** built with **.NET 10**, **.NET Aspire**, **Entity Framework Core**, **PostgreSQL**, **Redis**, **RabbitMQ**, and **KurrentDB**. Designed as a progressive learning resource for developers studying microservices patterns, this e-commerce platform demonstrates how to evolve from a monolith into a fully distributed system with proper service boundaries, event-driven communication, saga orchestration, CQRS/Event Sourcing, resilience hardening, and full-stack observability.
 
-> **Who is this for?** Developers learning microservices architecture who want a real, runnable codebase that demonstrates industry patterns — not just theory. Each version (v1–v8b) introduces a new concept you can study incrementally.
+> **Who is this for?** Developers learning microservices architecture who want a real, runnable codebase that demonstrates industry patterns — not just theory. Each version (v1–v10) introduces a new concept you can study incrementally.
 
 ---
 
@@ -74,7 +74,10 @@ A **production-grade microservices reference architecture** built with **.NET 10
 | **Transactional Outbox** | Order.API, Inventory.API | Reliable event publishing (atomicity between DB writes and messaging) |
 | **Inbox (Idempotency)** | Cart.API | Deduplicate message deliveries |
 | **Service Discovery** | Aspire runtime | Dynamic routing via logical service names (no hardcoded ports) |
-| **Distributed Tracing** | OpenTelemetry across all services | End-to-end observability across service boundaries |
+| **Distributed Tracing** | OpenTelemetry across all services | End-to-end observability: EF Core SQL spans, gRPC spans, Redis command traces, MassTransit publish/consume spans, saga-transition activity tags |
+| **Custom Metrics** | Per-service `Telemetry` classes | Business counters (orders, reservations), histograms (fan-out duration), observable gauges (projector lag) |
+| **Health-Check Separation** | `/alive`, `/ready`, `/health` per service | Liveness vs. readiness vs. aggregate — clean k8s probe semantics |
+| **Active Health Probes** | YARP active health checks on every cluster | Gateway stops routing to down backends; downed Identity returns 503 instead of 401 |
 | **Typed HTTP Clients** | `*.API.Client` libraries | Clean service-to-service communication contracts |
 | **Durable Timeouts** | Quartz persistent store (v8b) | Saga timeouts that survive service restarts |
 
@@ -150,6 +153,7 @@ A **production-grade microservices reference architecture** built with **.NET 10
 | **Technology** | YARP (Yet Another Reverse Proxy) |
 | **Responsibilities** | Routes `/api/v1/<service>/*` to backend services, JWT validation at the edge, per-route authorization policies |
 | **Service Discovery** | Uses Aspire service discovery to locate backends dynamically |
+| **Active Health Checks** | Probes `/health` on each backend cluster every 10 s; unhealthy destinations are removed from rotation. Identity cluster uses a threshold of 1 consecutive failure (all other clusters: 5). |
 | **Pattern** | Defense in depth (edge auth + backend auth) |
 
 ---
@@ -292,8 +296,9 @@ Saga timeouts use Quartz.NET with a persistent job store in PostgreSQL. Timeouts
 All services call `AddServiceDefaults()` which provides:
 - **Service Discovery** — dynamic resolution of service endpoints
 - **Resilience** — HTTP client retries, timeouts, circuit breakers (Polly)
-- **OpenTelemetry** — distributed tracing, metrics, and structured logging
-- **Health Checks** — `/health` (all checks) and `/alive` (liveness only)
+- **OpenTelemetry** — distributed tracing (EF Core, gRPC, Redis, MassTransit, ASP.NET Core, HTTP client), metrics, and structured logging
+- **Health Checks** — `/health` (all checks), `/alive` (liveness only), `/ready` (dependency readiness only)
+- **Sampler knob** — `OTEL_TRACES_SAMPLER_ARG` controls trace sampling rate (default `1.0`; set to e.g. `0.1` for 10% in production)
 
 ---
 
@@ -313,6 +318,8 @@ This project was built incrementally. Each version introduces a new microservice
 | **v8** | Saga orchestration | Checkout.API saga coordinates order → stock → confirmation |
 | **v8a** | Production hardening | N+1 query fixes, enum status values, validation annotations |
 | **v8b** | Durable timeouts | Quartz persistent store so saga timeouts survive restarts |
+| **v9** | Resilience hardening | EF retry strategy, MassTransit retries + circuit breakers, KurrentDB reconnect, single-flight token refresh |
+| **v10** | Full-stack observability | EF/gRPC/Redis/MassTransit instrumentation, per-service metrics, saga activity tags, `/ready` endpoint, YARP active health probes |
 
 > 📖 See the [`docs/`](docs/) folder for detailed change notes for each version.
 
@@ -446,7 +453,9 @@ dotnet build SimpleStore.slnx
 ## Further Reading
 
 - [`docs/checkout-saga.md`](docs/checkout-saga.md) — Detailed checkout saga design
-- [`docs/v1-changes.md`](docs/v1-changes.md) through [`docs/v8b-durable-store-for-saga-timeouts.md`](docs/v8b-durable-store-for-saga-timeouts.md) — Version-by-version migration notes
+- [`docs/v1-changes.md`](docs/v1-changes.md) through [`docs/v8b-durable-store-for-saga-timeouts.md`](docs/v8b-durable-store-for-saga-timeouts.md) — Version-by-version migration notes (v1–v8b)
+- [`docs/v9-changes.md`](docs/v9-changes.md) — v9 resilience hardening (EF retries, circuit breakers, single-flight token refresh)
+- [`docs/v10-changes.md`](docs/v10-changes.md) — v10 observability pass (OTel instrumentation, custom metrics, saga tracing, health-check separation, YARP active probes)
 - [.NET Aspire Documentation](https://learn.microsoft.com/dotnet/aspire/)
 - [MassTransit Saga Documentation](https://masstransit.io/documentation/patterns/saga)
 - [CQRS & Event Sourcing (Martin Fowler)](https://martinfowler.com/bliki/CQRS.html)
