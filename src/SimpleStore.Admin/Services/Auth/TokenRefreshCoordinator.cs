@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using SimpleStore.Admin.Observability;
 using SimpleStore.Identity.API.Client;
 
 namespace SimpleStore.Admin.Services.Auth;
@@ -12,8 +13,17 @@ public sealed class TokenRefreshCoordinator
 
     public Task<LoginResponse?> RefreshAsync(string refreshToken, Func<Task<LoginResponse?>> refreshFn)
     {
-        var lazy = _inFlight.GetOrAdd(refreshToken,
-            _ => new Lazy<Task<LoginResponse?>>(refreshFn, LazyThreadSafetyMode.ExecutionAndPublication));
+        // v10: count coalescing HITS — see Web's coordinator for the rationale and mechanism.
+        var created = false;
+        var lazy = _inFlight.GetOrAdd(refreshToken, _ =>
+        {
+            created = true;
+            return new Lazy<Task<LoginResponse?>>(refreshFn, LazyThreadSafetyMode.ExecutionAndPublication);
+        });
+        if (!created)
+        {
+            Telemetry.TokenRefreshCoalesced.Add(1);
+        }
         return AwaitAndCleanupAsync(refreshToken, lazy);
     }
 

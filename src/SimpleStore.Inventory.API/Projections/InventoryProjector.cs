@@ -22,21 +22,32 @@ namespace SimpleStore.Inventory.API.Projections;
 // the SAME Postgres transaction the projection service opened, so the read-model write, the
 // checkpoint, and the outbound events all commit atomically. During a cold-start replay isLive is
 // false and nothing is published — wiping + replaying does not spam RabbitMQ with history.
-public sealed class InventoryProjector
+// v10: marked `partial` to host LoggerMessage source-gen methods for the three hot-path Apply*
+// routines. The projector runs Apply* per event during steady state AND during cold-start replays
+// (full rebuild of the read tables), so a compile-time formatter is meaningfully cheaper than the
+// classic ILogger.LogInformation pattern.
+public sealed partial class InventoryProjector
 {
     private readonly InventoryReadDbContext _db;
     private readonly IPublishEndpoint _publish;
+    private readonly ILogger<InventoryProjector> _log;
 
-    public InventoryProjector(InventoryReadDbContext db, IPublishEndpoint publish)
+    public InventoryProjector(InventoryReadDbContext db, IPublishEndpoint publish, ILogger<InventoryProjector> log)
     {
         _db = db;
         _publish = publish;
+        _log = log;
     }
 
     public async Task ApplyDeliveryNoteIssuedAsync(DeliveryNoteIssuedV1 evt, bool isLive, CancellationToken ct)
     {
         var exists = await _db.DeliveryNotes.AsNoTracking().AnyAsync(n => n.Id == evt.NoteId, ct);
-        if (exists) return;
+        if (exists)
+        {
+            LogSkippedAlreadyProjected(_log, "DeliveryNoteIssuedV1", evt.NoteId);
+            return;
+        }
+        LogApplyDelivery(_log, evt.NoteId, evt.Lines.Count, isLive);
 
         var header = new DeliveryNoteRow
         {
@@ -81,7 +92,12 @@ public sealed class InventoryProjector
     public async Task ApplyReceiptNoteRecordedAsync(ReceiptNoteRecordedV1 evt, bool isLive, CancellationToken ct)
     {
         var exists = await _db.ReceiptNotes.AsNoTracking().AnyAsync(n => n.Id == evt.NoteId, ct);
-        if (exists) return;
+        if (exists)
+        {
+            LogSkippedAlreadyProjected(_log, "ReceiptNoteRecordedV1", evt.NoteId);
+            return;
+        }
+        LogApplyReceipt(_log, evt.NoteId, evt.Lines.Count, isLive);
 
         var header = new ReceiptNoteRow
         {
@@ -126,7 +142,12 @@ public sealed class InventoryProjector
     public async Task ApplyStockReservedAsync(StockReservedV1 evt, bool isLive, CancellationToken ct)
     {
         var exists = await _db.Reservations.AsNoTracking().AnyAsync(r => r.Id == evt.NoteId, ct);
-        if (exists) return;
+        if (exists)
+        {
+            LogSkippedAlreadyProjected(_log, "StockReservedV1", evt.NoteId);
+            return;
+        }
+        LogApplyReservation(_log, evt.NoteId, evt.OrderId, evt.CorrelationId, evt.Lines.Count, isLive);
 
         var header = new ReservationRow
         {
@@ -214,4 +235,33 @@ public sealed class InventoryProjector
         if (at > level.LastMovementAt) level.LastMovementAt = at;
         return level.OnHand;
     }
+
+    // v10: source-generated logging for the three hot-path apply routines + the dedup skip.
+    // Debug level for skips (high-volume during cold replay); Information for actual applies
+    // (operational signal during steady state).
+
+    [LoggerMessage(
+        EventId = 1300,
+        Level = LogLevel.Debug,
+        Message = "Projector skipped {EventType} for {NoteId} — already in read model.")]
+    private static partial void LogSkippedAlreadyProjected(ILogger logger, string eventType, Guid noteId);
+
+    [LoggerMessage(
+        EventId = 1301,
+        Level = LogLevel.Information,
+        Message = "Projector applied DeliveryNoteIssuedV1 {NoteId} ({LineCount} lines, isLive={IsLive}).")]
+    private static partial void LogApplyDelivery(ILogger logger, Guid noteId, int lineCount, bool isLive);
+
+    [LoggerMessage(
+        EventId = 1302,
+        Level = LogLevel.Information,
+        Message = "Projector applied ReceiptNoteRecordedV1 {NoteId} ({LineCount} lines, isLive={IsLive}).")]
+    private static partial void LogApplyReceipt(ILogger logger, Guid noteId, int lineCount, bool isLive);
+
+    [LoggerMessage(
+        EventId = 1303,
+        Level = LogLevel.Information,
+        Message = "Projector applied StockReservedV1 {ReservationId} for order {OrderId} (correlation {CorrelationId}, {LineCount} lines, isLive={IsLive}).")]
+    private static partial void LogApplyReservation(
+        ILogger logger, Guid reservationId, int orderId, Guid correlationId, int lineCount, bool isLive);
 }

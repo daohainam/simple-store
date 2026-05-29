@@ -1,9 +1,11 @@
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using SimpleStore.Inventory.API.Data;
 using SimpleStore.Inventory.API.Domain.DeliveryNotes.Events;
 using SimpleStore.Inventory.API.Domain.ReceiptNotes.Events;
 using SimpleStore.Inventory.API.Domain.Reservations.Events;
 using SimpleStore.Inventory.API.EventStore;
+using SimpleStore.Inventory.API.Observability;
 using SimpleStore.Inventory.API.Projections.Checkpoints;
 
 namespace SimpleStore.Inventory.API.Projections;
@@ -46,6 +48,14 @@ public sealed class InventoryProjectionService : BackgroundService
     private readonly TimeProvider _clock;
     private readonly ILogger<InventoryProjectionService> _log;
 
+    // v10: in-memory cursors for the projector-lag gauge. Updated as events flow through:
+    //   _lastSeenTailCommit  — set when a new envelope arrives from the subscription
+    //   _lastAppliedCommit   — set after a successful Apply transaction commits
+    // The gauge callback returns the delta. Cheap (two volatile reads, no I/O); reflects
+    // "events behind" approximately, in commit-log byte units (see Telemetry.cs notes).
+    private long _lastSeenTailCommit;
+    private long _lastAppliedCommit;
+
     public InventoryProjectionService(
         IServiceScopeFactory scopes,
         TimeProvider clock,
@@ -54,6 +64,15 @@ public sealed class InventoryProjectionService : BackgroundService
         _scopes = scopes;
         _clock = clock;
         _log = log;
+
+        // v10: wire the gauge callback. Telemetry holds a Func<long>; the OTel pipeline reads
+        // it at metric collection time. No allocation, no I/O — just two volatile loads.
+        Telemetry.SetProjectorLagProvider(() =>
+        {
+            var tail = Volatile.Read(ref _lastSeenTailCommit);
+            var applied = Volatile.Read(ref _lastAppliedCommit);
+            return tail > applied ? tail - applied : 0L;
+        });
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -114,12 +133,33 @@ public sealed class InventoryProjectionService : BackgroundService
             .SubscribeAllAsync(StreamPrefixes, checkpoint, stoppingToken)
             .WithCancellation(stoppingToken))
         {
+            // v10: track tail as events arrive — the gauge callback reads this to compute lag.
+            if (envelope.Position is { } seen)
+            {
+                Volatile.Write(ref _lastSeenTailCommit, unchecked((long)seen.CommitPosition));
+            }
+
             await ApplyOneAsync(envelope, stoppingToken);
         }
     }
 
     private async Task ApplyOneAsync(EventEnvelope envelope, CancellationToken ct)
     {
+        // v10: per-event activity span. The MassTransit publish (from InventoryProjector) and the EF
+        // execution-strategy transaction become nested children of this span, so the dashboard's
+        // trace view shows one parent per projected event with the read-write + integration-publish
+        // as a clear unit of work. Tag with event_type + is_live + stream for filtering.
+        using var activity = Telemetry.Source.StartActivity(
+            "InventoryProjector.Apply",
+            ActivityKind.Consumer);
+        activity?.SetTag("inventory.event_type", envelope.DomainEvent?.GetType().Name ?? envelope.Type);
+        activity?.SetTag("inventory.is_live", envelope.IsLive);
+        activity?.SetTag("inventory.stream", envelope.StreamName);
+        if (envelope.Position is { } pos0)
+        {
+            activity?.SetTag("inventory.position.commit", unchecked((long)pos0.CommitPosition));
+        }
+
         if (envelope.DomainEvent is null)
         {
             // Unknown event type — checkpoint past it but project nothing.
@@ -128,6 +168,7 @@ public sealed class InventoryProjectionService : BackgroundService
             _log.LogWarning(
                 "Projector skipped unknown event type {EventType} at position {Position} in stream {Stream}.",
                 envelope.Type, envelope.Position?.ToString() ?? "unknown", envelope.StreamName);
+            activity?.SetStatus(ActivityStatusCode.Ok, "skipped-unknown-event");
             await CheckpointOnlyAsync(envelope, ct);
             return;
         }
@@ -170,6 +211,13 @@ public sealed class InventoryProjectionService : BackgroundService
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
         });
+
+        // v10: update applied-position AFTER the transaction commits so the gauge reflects
+        // "successfully projected" rather than "received but not yet durable".
+        if (envelope.Position is { } applied)
+        {
+            Volatile.Write(ref _lastAppliedCommit, unchecked((long)applied.CommitPosition));
+        }
     }
 
     private async Task CheckpointOnlyAsync(EventEnvelope envelope, CancellationToken ct)
@@ -185,5 +233,9 @@ public sealed class InventoryProjectionService : BackgroundService
             await checkpoints.UpsertAsync(ProjectionName, pos, _clock.GetUtcNow(), ct);
             await db.SaveChangesAsync(ct);
         });
+
+        // v10: advance the gauge cursor — even when we project nothing, the checkpoint
+        // moves and the projector is "caught up" past this event.
+        Volatile.Write(ref _lastAppliedCommit, unchecked((long)pos.CommitPosition));
     }
 }

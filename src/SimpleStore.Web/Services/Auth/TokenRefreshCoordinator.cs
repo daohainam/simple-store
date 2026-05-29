@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using SimpleStore.Identity.API.Client;
+using SimpleStore.Web.Observability;
 
 namespace SimpleStore.Web.Services.Auth;
 
@@ -21,8 +22,21 @@ public sealed class TokenRefreshCoordinator
 
     public Task<LoginResponse?> RefreshAsync(string refreshToken, Func<Task<LoginResponse?>> refreshFn)
     {
-        var lazy = _inFlight.GetOrAdd(refreshToken,
-            _ => new Lazy<Task<LoginResponse?>>(refreshFn, LazyThreadSafetyMode.ExecutionAndPublication));
+        // v10: count coalescing HITS. The Lazy is created exactly once per refresh-token value;
+        // subsequent callers that reuse it are by definition piggybacking on an in-flight rotation.
+        // We detect "we are not the first" by tracking whether the factory ran. If `created` stays
+        // false, this caller was a hit and we increment. This is the operational signal for the
+        // v9 §8 effectiveness goal — a counter > 0 means the coordinator actually deduplicated.
+        var created = false;
+        var lazy = _inFlight.GetOrAdd(refreshToken, _ =>
+        {
+            created = true;
+            return new Lazy<Task<LoginResponse?>>(refreshFn, LazyThreadSafetyMode.ExecutionAndPublication);
+        });
+        if (!created)
+        {
+            Telemetry.TokenRefreshCoalesced.Add(1);
+        }
         return AwaitAndCleanupAsync(refreshToken, lazy);
     }
 

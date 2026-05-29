@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using MassTransit;
 using SimpleStore.Checkout.API.Timeouts;
 using SimpleStore.Contracts;
@@ -29,8 +30,11 @@ public sealed class CheckoutSagaStateMachine : MassTransitStateMachine<CheckoutS
 
     public Schedule<CheckoutSagaState, ReservationTimeoutExpired> ReservationTimeout { get; private set; } = null!;
 
-    public CheckoutSagaStateMachine(IConfiguration configuration)
+    private readonly ILogger<CheckoutSagaStateMachine> _log;
+
+    public CheckoutSagaStateMachine(IConfiguration configuration, ILogger<CheckoutSagaStateMachine> log)
     {
+        _log = log;
         InstanceState(x => x.CurrentState);
 
         var timeoutSeconds = configuration.GetValue<int?>("Checkout:ReservationTimeoutSeconds") ?? 30;
@@ -54,6 +58,10 @@ public sealed class CheckoutSagaStateMachine : MassTransitStateMachine<CheckoutS
                     ctx.Saga.ReservationId = Guid.NewGuid();
                     ctx.Saga.CreatedAt = DateTime.UtcNow;
                     ctx.Saga.UpdatedAt = DateTime.UtcNow;
+                    // v10: log + tag the transition. The MassTransit consumer-dispatch span is the
+                    // current Activity here (auto-emitted once §1 added AddSource("MassTransit"));
+                    // tagging it adds the business label without nesting a redundant span.
+                    LogTransition(ctx.Saga, "Initial", "AwaitingStock", reason: null);
                 })
                 .Schedule(ReservationTimeout, ctx => new ReservationTimeoutExpired { CorrelationId = ctx.Saga.CorrelationId })
                 .Publish(ctx => new ReserveStockRequestedEvent
@@ -71,7 +79,11 @@ public sealed class CheckoutSagaStateMachine : MassTransitStateMachine<CheckoutS
         During(AwaitingStock,
             When(StockReserved)
                 .Unschedule(ReservationTimeout)
-                .Then(ctx => ctx.Saga.UpdatedAt = DateTime.UtcNow)
+                .Then(ctx =>
+                {
+                    ctx.Saga.UpdatedAt = DateTime.UtcNow;
+                    LogTransition(ctx.Saga, "AwaitingStock", "Confirmed", reason: null);
+                })
                 .Publish(ctx => new OrderConfirmedEvent
                 {
                     CorrelationId = ctx.Saga.CorrelationId,
@@ -87,6 +99,7 @@ public sealed class CheckoutSagaStateMachine : MassTransitStateMachine<CheckoutS
                 {
                     ctx.Saga.FailureReason = ctx.Message.Reason;
                     ctx.Saga.UpdatedAt = DateTime.UtcNow;
+                    LogTransition(ctx.Saga, "AwaitingStock", "Cancelled", reason: ctx.Message.Reason);
                 })
                 .Publish(ctx => new OrderCancelledEvent
                 {
@@ -102,6 +115,7 @@ public sealed class CheckoutSagaStateMachine : MassTransitStateMachine<CheckoutS
                 {
                     ctx.Saga.FailureReason = "ReservationTimeout";
                     ctx.Saga.UpdatedAt = DateTime.UtcNow;
+                    LogTransition(ctx.Saga, "AwaitingStock", "Cancelled", reason: "ReservationTimeout");
                 })
                 .Publish(ctx => new OrderCancelledEvent
                 {
@@ -115,5 +129,33 @@ public sealed class CheckoutSagaStateMachine : MassTransitStateMachine<CheckoutS
 
         // Remove finalized saga instances from checkoutdb. Flip to keep them for audit.
         SetCompletedWhenFinalized();
+    }
+
+    private void LogTransition(CheckoutSagaState saga, string from, string to, string? reason)
+    {
+        // Logs feed the Aspire dashboard's log view; the tags feed the trace view. Both share
+        // the same CorrelationId so filtering by it joins them up across all participating services.
+        if (reason is null)
+        {
+            _log.LogInformation(
+                "Saga {CorrelationId} order {OrderId}: {FromState} -> {ToState}.",
+                saga.CorrelationId, saga.OrderId, from, to);
+        }
+        else
+        {
+            _log.LogInformation(
+                "Saga {CorrelationId} order {OrderId}: {FromState} -> {ToState} ({Reason}).",
+                saga.CorrelationId, saga.OrderId, from, to, reason);
+        }
+
+        var activity = Activity.Current;
+        if (activity is not null)
+        {
+            activity.SetTag("saga.correlation_id", saga.CorrelationId);
+            activity.SetTag("saga.order_id", saga.OrderId);
+            activity.SetTag("saga.state.from", from);
+            activity.SetTag("saga.state.to", to);
+            if (reason is not null) activity.SetTag("saga.cancel_reason", reason);
+        }
     }
 }

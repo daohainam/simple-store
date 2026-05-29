@@ -60,8 +60,11 @@ builder.Services.AddSingleton<EventTypeRegistry>();
 builder.Services.AddSingleton<IEventStore, KurrentEventStore>();
 
 // v9: readiness probe for KurrentDB so /health flips to 503 when the event store is unreachable.
+// v10: tagged "ready" so it also shows up on /ready (the readiness-only endpoint). KurrentDB is
+// a true dependency — if it's down the projector can't replay events and the read model goes
+// stale, so the service should refuse traffic until it returns.
 builder.Services.AddHealthChecks()
-    .AddCheck<KurrentDbHealthCheck>("kurrentdb");
+    .AddCheck<KurrentDbHealthCheck>("kurrentdb", tags: ["ready"]);
 
 // --- Application + projector --------------------------------------------------
 builder.Services.AddSingleton(TimeProvider.System);

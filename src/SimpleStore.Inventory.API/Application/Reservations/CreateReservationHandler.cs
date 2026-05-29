@@ -5,6 +5,7 @@ using SimpleStore.Inventory.API.Data;
 using SimpleStore.Inventory.API.Domain.Reservations;
 using SimpleStore.Inventory.API.Domain.Shared;
 using SimpleStore.Inventory.API.EventStore;
+using SimpleStore.Inventory.API.Observability;
 
 namespace SimpleStore.Inventory.API.Application.Reservations;
 
@@ -103,6 +104,12 @@ public sealed class CreateReservationHandler
                 }, ct);
                 await _readDb.SaveChangesAsync(ct); // flush the bus outbox in this transaction
                 await tx.CommitAsync(ct);
+                // v10: business counter. The reason tag splits failures by cause; today only
+                // "InsufficientStock" exists, but the tag dimension lets new reasons (e.g. domain
+                // validation failures) slot in without a metric-namespace change.
+                Telemetry.ReservationsFailed.Add(1,
+                    new KeyValuePair<string, object?>("reason", "InsufficientStock"),
+                    new KeyValuePair<string, object?>("shortage_lines", shortages.Count));
                 _log.LogInformation(
                     "Reservation {ReservationId} for order {OrderId} rejected — insufficient stock on {Count} line(s).",
                     cmd.ReservationId, cmd.OrderId, shortages.Count);
@@ -124,6 +131,9 @@ public sealed class CreateReservationHandler
                 // StockReservedV1 was (or will be) projected and StockReservedEvent published, so the
                 // saga already got (or will get) its answer. Treat the retry as a no-op success.
                 await tx.CommitAsync(ct);
+                // v10: do NOT increment ReservationsSucceeded here — the original append already
+                // counted (or will count) when the saga first ran. Counting a redelivery would
+                // double-count the same reservation.
                 _log.LogInformation(
                     "Reservation {ReservationId} already exists — treating redelivery as success.", cmd.ReservationId);
                 return;
@@ -131,6 +141,12 @@ public sealed class CreateReservationHandler
 
             await _readDb.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
+
+            // v10: success counter. Recorded only on first-time success — saga redelivery is a
+            // no-op above. Outside the lambda would be wrong (retry would double-count); inside
+            // the strategy.ExecuteAsync but after CommitAsync is the correct narrow window.
+            Telemetry.ReservationsSucceeded.Add(1,
+                new KeyValuePair<string, object?>("line_count", cmd.Lines.Count));
         });
     }
 }

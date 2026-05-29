@@ -1,10 +1,12 @@
 using MassTransit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using OpenTelemetry.Trace;
 using SimpleStore.Cart.API.Consumers;
 using SimpleStore.Cart.API.Endpoints;
 using SimpleStore.Cart.API.Middleware;
 using SimpleStore.Cart.API.Services;
+using StackExchange.Redis;
 
 // Internal API on the Aspire network. Cart data lives in Redis ("cart-redis" resource).
 // Anonymous browsers identify with an X-Cart-Id header (GUID); authenticated callers
@@ -18,6 +20,18 @@ builder.AddRedisDistributedCache("cart-redis");
 // Also register the raw IConnectionMultiplexer (same Aspire resource) so RedisCartStore can SCAN
 // every cart key — needed by ProductUpdatedConsumer to fan out denormalized refreshes.
 builder.AddRedisClient("cart-redis");
+
+// v10: Redis tracing. The instrumentation hooks StackExchange.Redis's ProfilingSession into the
+// IConnectionMultiplexer Aspire just registered, so every GET/SET/SCAN becomes a span with the
+// command name and redis.flags as tags. Has to be wired here (not in ServiceDefaults) because
+// the multiplexer is a per-service concern and ConfigureRedisInstrumentation needs DI access.
+builder.Services.AddOpenTelemetry()
+    .WithTracing(t => t.AddRedisInstrumentation());
+builder.Services.ConfigureOpenTelemetryTracerProvider((sp, _) =>
+{
+    var instrumentation = sp.GetRequiredService<OpenTelemetry.Instrumentation.StackExchangeRedis.StackExchangeRedisInstrumentation>();
+    instrumentation.AddConnection(sp.GetRequiredService<IConnectionMultiplexer>());
+});
 
 builder.Services.AddScoped<ICartStore, RedisCartStore>();
 

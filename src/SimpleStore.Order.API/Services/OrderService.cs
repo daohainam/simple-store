@@ -4,6 +4,7 @@ using SimpleStore.Contracts;
 using SimpleStore.Order.API.Client;
 using SimpleStore.Order.API.Data;
 using SimpleStore.Order.API.Models;
+using SimpleStore.Order.API.Observability;
 using OrderEntity = SimpleStore.Order.API.Models.Order;
 using OrderItem = SimpleStore.Order.API.Models.OrderItem;
 
@@ -15,11 +16,13 @@ public class OrderService : IOrderService
 
     private readonly OrderDbContext _context;
     private readonly IPublishEndpoint _publishEndpoint;
+    private readonly ILogger<OrderService> _log;
 
-    public OrderService(OrderDbContext context, IPublishEndpoint publishEndpoint)
+    public OrderService(OrderDbContext context, IPublishEndpoint publishEndpoint, ILogger<OrderService> log)
     {
         _context = context;
         _publishEndpoint = publishEndpoint;
+        _log = log;
     }
 
     public async Task<IReadOnlyList<OrderDto>> GetMyOrdersAsync(string userId, CancellationToken ct = default)
@@ -61,6 +64,16 @@ public class OrderService : IOrderService
             }).ToList()
         };
 
+        // v10: open a logging scope keyed by CorrelationId. With IncludeScopes=true (set in
+        // ServiceDefaults' OTel logging config), the scope flows into both console output and the
+        // OTLP log records — the Aspire dashboard's log view filters on this field for free, so
+        // operators can follow one checkout's logs across Order, Checkout (saga), and Inventory.
+        using var scope = _log.BeginScope(new Dictionary<string, object>
+        {
+            ["CorrelationId"] = order.CorrelationId,
+            ["OrderId.Provisional"] = "pending-assignment"
+        });
+
         // Insert the order first so EF assigns Id values to it and its OrderItems; that Id is what
         // OrderSubmittedEvent carries to downstream consumers. The second SaveChangesAsync flushes
         // the in-memory bus outbox into OutboxMessage. We wrap both in an explicit transaction so
@@ -99,6 +112,14 @@ public class OrderService : IOrderService
             await _context.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
         });
+
+        // v10: business metric — incremented after the transaction commits so the count is
+        // monotonically true ("orders that exist"). LineCount tag is bounded by request validation.
+        Telemetry.OrdersSubmitted.Add(1, new KeyValuePair<string, object?>("line_count", order.Items.Count));
+
+        _log.LogInformation(
+            "Order {OrderId} submitted for user {UserId} (correlation {CorrelationId}, {LineCount} lines, total {TotalAmount}).",
+            order.Id, order.UserId, order.CorrelationId, order.Items.Count, order.TotalAmount);
 
         return ToDto(order);
     }

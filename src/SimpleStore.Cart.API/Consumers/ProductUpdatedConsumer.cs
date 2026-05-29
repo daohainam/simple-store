@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using System.Text.Json;
 using MassTransit;
 using Microsoft.Extensions.Caching.Distributed;
 using SimpleStore.Cart.API.Client;
+using SimpleStore.Cart.API.Observability;
 using SimpleStore.Cart.API.Services;
 using SimpleStore.Contracts;
 
@@ -18,8 +20,14 @@ namespace SimpleStore.Cart.API.Consumers;
 ///
 /// We scan every cart key via IConnectionMultiplexer.SCAN rather than maintaining a reverse
 /// index. This is linear in cart count; acceptable while cart-key count is small/medium.
+///
+/// v10: hot-path logging uses LoggerMessage source generation (compile-time formatter, no
+/// boxing on the happy path) because this consumer runs on every admin product edit and the
+/// fan-out can touch thousands of cart keys. The CartFanoutDuration histogram records how long
+/// the scan takes so operators can spot when key count grows past the "small/medium" comfort
+/// zone (the threshold where a reverse index becomes worth maintaining).
 /// </summary>
-public class ProductUpdatedConsumer : IConsumer<ProductUpdatedEvent>
+public partial class ProductUpdatedConsumer : IConsumer<ProductUpdatedEvent>
 {
     private static readonly DistributedCacheEntryOptions EntryOptions = new()
     {
@@ -41,12 +49,21 @@ public class ProductUpdatedConsumer : IConsumer<ProductUpdatedEvent>
     {
         var evt = context.Message;
         var ct = context.CancellationToken;
+
+        // v10: scope every log line in this consume by ProductId so dashboard log filters trivially
+        // collate every cart-refresh attempt for one product. No CorrelationId here — the event is
+        // a Catalog domain notification, not saga-coupled.
+        using var _ = _logger.BeginScope(new Dictionary<string, object> { ["ProductId"] = evt.ProductId });
+
         var touched = 0;
+        var scanned = 0;
+        var sw = Stopwatch.StartNew();
 
         // SCAN is used under the hood by IConnectionMultiplexer.EnumerateKeysAsync to avoid blocking Redis.
         // If cart count grows materially, switch to a maintained reverse index (product:{id}:carts) or a similar approach instead.
         await foreach (var ownerKey in _store.EnumerateOwnerKeysAsync(ct))
         {
+            scanned++;
             var redisKey = "cart:" + ownerKey;
             var raw = await _cache.GetStringAsync(redisKey, ct);
             if (string.IsNullOrEmpty(raw)) continue;
@@ -71,11 +88,27 @@ public class ProductUpdatedConsumer : IConsumer<ProductUpdatedEvent>
             }
         }
 
+        sw.Stop();
+
+        // Record the duration regardless of touch count — the cost is the SCAN, not the writes.
+        Telemetry.CartFanoutDuration.Record(
+            sw.Elapsed.TotalMilliseconds,
+            new KeyValuePair<string, object?>("scanned", scanned),
+            new KeyValuePair<string, object?>("touched", touched));
+
         if (touched > 0)
         {
-            _logger.LogInformation(
-                "Refreshed {Count} cart(s) after ProductUpdatedEvent for ProductId={ProductId}.",
-                touched, evt.ProductId);
+            LogFanoutTouched(_logger, touched, scanned, evt.ProductId, sw.Elapsed.TotalMilliseconds);
         }
     }
+
+    // v10: high-performance source-generated logger. The formatter is generated at compile time;
+    // the call site uses no boxing and no reflection. Worth it because the fan-out consumer fires
+    // on every product edit and `touched > 0` is the common case in a non-empty store.
+    [LoggerMessage(
+        EventId = 1100,
+        Level = LogLevel.Information,
+        Message = "Refreshed {Touched} cart(s) of {Scanned} scanned after ProductUpdatedEvent for ProductId={ProductId} in {ElapsedMs:F1} ms.")]
+    private static partial void LogFanoutTouched(
+        ILogger logger, int touched, int scanned, int productId, double elapsedMs);
 }

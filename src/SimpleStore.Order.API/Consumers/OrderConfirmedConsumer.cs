@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using SimpleStore.Contracts;
 using SimpleStore.Order.API.Data;
 using SimpleStore.Order.API.Models;
+using SimpleStore.Order.API.Observability;
 
 namespace SimpleStore.Order.API.Consumers;
 
@@ -24,6 +25,10 @@ public sealed class OrderConfirmedConsumer : IConsumer<OrderConfirmedEvent>
     public async Task Consume(ConsumeContext<OrderConfirmedEvent> context)
     {
         var msg = context.Message;
+
+        // v10: scope the consume by CorrelationId so this log line joins up with the saga + Inventory.
+        using var _ = _log.BeginScope(new Dictionary<string, object> { ["CorrelationId"] = msg.CorrelationId });
+
         var order = await _context.Orders.FirstOrDefaultAsync(
             o => o.CorrelationId == msg.CorrelationId, context.CancellationToken);
 
@@ -35,6 +40,7 @@ public sealed class OrderConfirmedConsumer : IConsumer<OrderConfirmedEvent>
 
         order.Status = OrderStatus.Confirmed;
         await _context.SaveChangesAsync(context.CancellationToken);
+        Telemetry.OrdersConfirmed.Add(1);
         _log.LogInformation("Order {OrderId} confirmed (correlation {CorrelationId})", order.Id, msg.CorrelationId);
     }
 }

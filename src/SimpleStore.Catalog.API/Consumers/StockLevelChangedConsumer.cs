@@ -31,6 +31,15 @@ public sealed class StockLevelChangedConsumer : IConsumer<StockLevelChangedEvent
         var msg = context.Message;
         var ct = context.CancellationToken;
 
+        // v10: scope by ProductId + cause. StockLevelChanged carries no CorrelationId (it's a
+        // domain-event-derived integration event, not saga-coupled), but ProductId is what an
+        // operator filters on when triaging "why did this product's stock jump?"
+        using var _ = _logger.BeginScope(new Dictionary<string, object>
+        {
+            ["ProductId"] = msg.ProductId,
+            ["StockChangeCause"] = msg.Cause
+        });
+
         var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == msg.ProductId, ct);
         if (product is null)
         {
