@@ -18,6 +18,9 @@
     <Project Path="src/SimpleStore.Order.API/SimpleStore.Order.API.csproj" />
     <Project Path="src/SimpleStore.Web/SimpleStore.Web.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SimpleStore.IntegrationTests/SimpleStore.IntegrationTests.csproj" />
+  </Folder>
   <Project Path="src/SimpleStore.AppHost/SimpleStore.AppHost.csproj" Id="25d9c4d7-07ad-4d61-8b98-9f247c5df997" />
   <Project Path="src/SimpleStore.ServiceDefaults/SimpleStore.ServiceDefaults.csproj" />
 </Solution>
