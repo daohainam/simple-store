@@ -70,7 +70,7 @@ public class CatalogService : ICatalogService
     {
         // Stock starts at 0 — Inventory.API is the source of truth. An admin establishes initial
         // stock by issuing a receipt note in Inventory, which flows back here as a
-        // StockLevelChangedEvent and updates the cached Product.Stock.
+        // StockLevelChangedEventV1 and updates the cached Product.Stock.
         var product = new Product
         {
             Name = request.Name,
@@ -94,14 +94,14 @@ public class CatalogService : ICatalogService
         if (product is null) return false;
 
         // Stock is intentionally NOT updated here — it is owned by Inventory.API and refreshed via
-        // StockLevelChangedEvent.
+        // StockLevelChangedEventV1.
         product.Name = request.Name;
         product.Description = request.Description;
         product.Price = request.Price;
         product.ImageUrl = request.ImageUrl;
         product.CategoryId = request.CategoryId;
 
-        // Persist + publish atomically: ProductUpdatedEvent is written to OutboxMessage in the same
+        // Persist + publish atomically: ProductUpdatedEventV1 is written to OutboxMessage in the same
         // transaction as the product update. Cart.API consumes it to refresh denormalized line items.
         // CategoryName is loaded separately because the consumer wants the same shape ProductDto has.
         //
@@ -117,7 +117,7 @@ public class CatalogService : ICatalogService
 
             await _context.Entry(product).Reference(p => p.Category).LoadAsync(ct);
 
-            await _publishEndpoint.Publish(new ProductUpdatedEvent
+            await _publishEndpoint.Publish(new ProductUpdatedEventV1
             {
                 ProductId = product.Id,
                 Name = product.Name,

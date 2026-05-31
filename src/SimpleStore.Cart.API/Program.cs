@@ -16,6 +16,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 
+// v11: URL-segment API versioning. See Identity.API/Program.cs for rationale.
+builder.AddSimpleStoreApiVersioning();
+
 builder.AddRedisDistributedCache("cart-redis");
 // Also register the raw IConnectionMultiplexer (same Aspire resource) so RedisCartStore can SCAN
 // every cart key — needed by ProductUpdatedConsumer to fan out denormalized refreshes.
@@ -95,7 +98,8 @@ builder.Services
 
 builder.Services.AddAuthorization();
 
-builder.Services.AddOpenApi();
+// v11: explicit "v1" document name. See Identity.API/Program.cs.
+builder.Services.AddOpenApi("v1");
 
 var app = builder.Build();
 

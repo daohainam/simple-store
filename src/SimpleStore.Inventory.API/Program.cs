@@ -29,6 +29,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 
+// v11: URL-segment API versioning. See Identity.API/Program.cs for rationale.
+builder.AddSimpleStoreApiVersioning();
+
 // --- Read side: Postgres ------------------------------------------------------
 // v9: EF Core retry-on-failure for transient Postgres errors. See Identity.API/Program.cs for rationale.
 builder.AddNpgsqlDbContext<InventoryReadDbContext>("inventorydb",
@@ -76,8 +79,8 @@ builder.Services.AddScoped<CheckpointStore>();
 builder.Services.AddHostedService<InventoryProjectionService>();
 
 // --- MassTransit + RabbitMQ (v8) ----------------------------------------------
-// Inventory joins the bus in v8. It consumes ReserveStockRequestedEvent (checkout saga) and
-// publishes StockReservedEvent / StockReservationFailedEvent / StockLevelChangedEvent. The EF
+// Inventory joins the bus in v8. It consumes ReserveStockRequestedEventV1 (checkout saga) and
+// publishes StockReservedEventV1 / StockReservationFailedEventV1 / StockLevelChangedEventV1. The EF
 // bus outbox lets the async projector publish integration events inside the same Postgres
 // transaction as the read-model write (see InventoryProjectionService).
 builder.Services.AddMassTransit(x =>
@@ -146,7 +149,8 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("Admin", p => p.RequireAuthenticatedUser().RequireRole("Admin"));
 });
 
-builder.Services.AddOpenApi();
+// v11: explicit "v1" document name. See Identity.API/Program.cs.
+builder.Services.AddOpenApi("v1");
 
 var app = builder.Build();
 

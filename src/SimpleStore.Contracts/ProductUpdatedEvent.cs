@@ -1,3 +1,5 @@
+using MassTransit;
+
 namespace SimpleStore.Contracts;
 
 /// <summary>
@@ -5,8 +7,11 @@ namespace SimpleStore.Contracts;
 /// the denormalized ProductName / UnitPrice / ImageUrl on any cart line that holds this product.
 /// Fields mirror ProductDto so a consumer can refresh every denormalized copy in one pass.
 /// </summary>
-public sealed record ProductUpdatedEvent
+// v11: wire URN pinned to the pre-v11 default — see OrderSubmittedEvent.cs.
+[MessageUrn("urn:message:SimpleStore.Contracts:ProductUpdatedEvent")]
+public sealed record ProductUpdatedEventV1
 {
+    public int Version { get; init; } = 1;
     public int ProductId { get; init; }
     public string Name { get; init; } = string.Empty;
     public string Description { get; init; } = string.Empty;

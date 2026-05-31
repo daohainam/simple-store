@@ -14,6 +14,10 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 
+// v11: URL-segment API versioning. Endpoints live under /api/v{version:apiVersion}/<service>/...
+// See SimpleStore.ServiceDefaults/ApiVersioningExtensions.cs and docs/versioning.md.
+builder.AddSimpleStoreApiVersioning();
+
 // v9: EF Core retry-on-failure for transient Postgres errors (failover, restart, network hiccups).
 // We disable Aspire's built-in simple retry (settings.DisableRetry = true) and configure our own
 // exponential strategy via Npgsql — gives explicit control over retry count + max delay.
@@ -87,7 +91,10 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("Admin", p => p.RequireAuthenticatedUser().RequireRole("Admin"));
 });
 
-builder.Services.AddOpenApi();
+// v11: explicit "v1" document name so /openapi/v1.json is the live URL and future versions
+// add as AddOpenApi("v2", ...). Asp.Versioning sets GroupName on each endpoint description, so
+// only endpoints mapped to v1 land in this document.
+builder.Services.AddOpenApi("v1");
 
 var app = builder.Build();
 

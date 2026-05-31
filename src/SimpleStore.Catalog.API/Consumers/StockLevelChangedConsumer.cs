@@ -7,7 +7,7 @@ namespace SimpleStore.Catalog.API.Consumers;
 
 /// <summary>
 /// Refreshes the denormalized Product.Stock cache from Inventory.API (the single source of truth
-/// for stock in v8+). Inventory's projector publishes StockLevelChangedEvent whenever stock_levels
+/// for stock in v8+). Inventory's projector publishes StockLevelChangedEventV1 whenever stock_levels
 /// changes (reservations, receipt notes, delivery notes); we overwrite Product.Stock with the
 /// authoritative NewOnHand.
 ///
@@ -15,7 +15,7 @@ namespace SimpleStore.Catalog.API.Consumers;
 /// against duplicate delivery. Eventual consistency: the storefront may briefly show stale stock
 /// between the inventory change and this consume — acceptable for the sample.
 /// </summary>
-public sealed class StockLevelChangedConsumer : IConsumer<StockLevelChangedEvent>
+public sealed class StockLevelChangedConsumer : IConsumer<StockLevelChangedEventV1>
 {
     private readonly CatalogDbContext _context;
     private readonly ILogger<StockLevelChangedConsumer> _logger;
@@ -26,7 +26,7 @@ public sealed class StockLevelChangedConsumer : IConsumer<StockLevelChangedEvent
         _logger = logger;
     }
 
-    public async Task Consume(ConsumeContext<StockLevelChangedEvent> context)
+    public async Task Consume(ConsumeContext<StockLevelChangedEventV1> context)
     {
         var msg = context.Message;
         var ct = context.CancellationToken;
@@ -44,7 +44,7 @@ public sealed class StockLevelChangedConsumer : IConsumer<StockLevelChangedEvent
         if (product is null)
         {
             _logger.LogWarning(
-                "StockLevelChangedEvent for unknown ProductId={ProductId} — Catalog has no such product.",
+                "StockLevelChangedEventV1 for unknown ProductId={ProductId} — Catalog has no such product.",
                 msg.ProductId);
             return;
         }

@@ -11,7 +11,7 @@ namespace SimpleStore.Order.API.Consumers;
 /// Consumed when the checkout saga finishes successfully. Flips Order.Status to Confirmed
 /// on the row matching CorrelationId. The MassTransit EF inbox makes the consume idempotent.
 /// </summary>
-public sealed class OrderConfirmedConsumer : IConsumer<OrderConfirmedEvent>
+public sealed class OrderConfirmedConsumer : IConsumer<OrderConfirmedEventV1>
 {
     private readonly OrderDbContext _context;
     private readonly ILogger<OrderConfirmedConsumer> _log;
@@ -22,7 +22,7 @@ public sealed class OrderConfirmedConsumer : IConsumer<OrderConfirmedEvent>
         _log = log;
     }
 
-    public async Task Consume(ConsumeContext<OrderConfirmedEvent> context)
+    public async Task Consume(ConsumeContext<OrderConfirmedEventV1> context)
     {
         var msg = context.Message;
 
@@ -34,7 +34,7 @@ public sealed class OrderConfirmedConsumer : IConsumer<OrderConfirmedEvent>
 
         if (order is null)
         {
-            _log.LogWarning("OrderConfirmedEvent for unknown CorrelationId {CorrelationId}", msg.CorrelationId);
+            _log.LogWarning("OrderConfirmedEventV1 for unknown CorrelationId {CorrelationId}", msg.CorrelationId);
             return;
         }
 

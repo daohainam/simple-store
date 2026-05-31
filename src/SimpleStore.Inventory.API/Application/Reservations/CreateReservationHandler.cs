@@ -13,11 +13,11 @@ namespace SimpleStore.Inventory.API.Application.Reservations;
 // handlers, this one has two outcomes:
 //
 //   SUCCESS — enough stock on hand: append StockReservedV1 to KurrentDB. The async projector then
-//             decrements stock_levels.OnHand and publishes StockReservedEvent + StockLevelChangedEvent.
+//             decrements stock_levels.OnHand and publishes StockReservedEventV1 + StockLevelChangedEventV1.
 //             This handler publishes NOTHING on success — the projector owns that.
 //
 //   FAILURE — insufficient stock: append NOTHING to the event store (a rejected command emits no
-//             domain event, DDD-style) and publish StockReservationFailedEvent directly through the
+//             domain event, DDD-style) and publish StockReservationFailedEventV1 directly through the
 //             MassTransit EF bus outbox. The saga consumes it and cancels the order.
 //
 // Concurrency: we SELECT ... FOR UPDATE the stock_levels rows so concurrent reservation handlers
@@ -93,7 +93,7 @@ public sealed class CreateReservationHandler
 
             if (shortages.Count > 0)
             {
-                await _publishEndpoint.Publish(new StockReservationFailedEvent
+                await _publishEndpoint.Publish(new StockReservationFailedEventV1
                 {
                     CorrelationId = cmd.CorrelationId,
                     ReservationId = cmd.ReservationId,
@@ -128,7 +128,7 @@ public sealed class CreateReservationHandler
             catch (ConcurrencyConflictException)
             {
                 // Saga retry: this ReservationId already exists in the event store. The original
-                // StockReservedV1 was (or will be) projected and StockReservedEvent published, so the
+                // StockReservedV1 was (or will be) projected and StockReservedEventV1 published, so the
                 // saga already got (or will get) its answer. Treat the retry as a no-op success.
                 await tx.CommitAsync(ct);
                 // v10: do NOT increment ReservationsSucceeded here — the original append already

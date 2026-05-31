@@ -8,7 +8,7 @@ using SimpleStore.ServiceDefaults;
 // SimpleStore.Checkout.API — v8 checkout saga orchestrator.
 //
 // Pure consumer/orchestrator: NO HTTP surface, NO JWT (it only reacts to RabbitMQ messages).
-// It consumes OrderSubmittedEvent, drives a MassTransit saga state machine, asks Inventory.API to
+// It consumes OrderSubmittedEventV1, drives a MassTransit saga state machine, asks Inventory.API to
 // reserve stock, and tells Order.API whether to confirm or cancel the order. Saga state lives in
 // checkoutdb (Postgres) via the MassTransit EF saga repository.
 

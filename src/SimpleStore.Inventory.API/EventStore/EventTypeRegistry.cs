@@ -8,6 +8,15 @@ namespace SimpleStore.Inventory.API.EventStore;
 // Bidirectional map between CLR event types and KurrentDB wire-type strings.
 // New event types: add a single line here. The .v1 suffix is the versioning
 // anchor — additive changes keep .v1, breaking changes go to .v2.
+//
+// v11 — V2 introduction recipe (illustrative, no V2 exists yet):
+//   1. Add a constant + entry below: e.g. `StockReservedV2Type = "simplestore.inventory.reservation.reserved.v2"`.
+//   2. Add an `ApplyStockReservedV2Async(StockReservedV2 evt, bool isLive, CancellationToken ct)`
+//      overload to InventoryProjector and a switch case in InventoryProjectionService.ApplyOneAsync.
+//   3. Optionally implement `IEventUpcaster<StockReservedV1, StockReservedV2>` and resolve it from
+//      DI in the projector to flow V1 events through the V2 apply method during a cold replay.
+// Historic events keep their wire string forever — V1 wire type stays in this registry as long as
+// any V1 event remains in KurrentDB (i.e. effectively forever).
 public sealed class EventTypeRegistry
 {
     public const string DeliveryNoteIssuedV1Type = "simplestore.inventory.delivery-note.issued.v1";

@@ -14,11 +14,11 @@ var cartRedis = builder.AddRedis("cart-redis")
     .WithRedisInsight();
 
 // RabbitMQ is the event bus (MassTransit). Management plugin gives a dev-only web UI.
-// v8 flows: Order.API publishes OrderSubmittedEvent; Checkout.API (saga) consumes it and publishes
-// ReserveStockRequestedEvent; Inventory.API consumes that and publishes StockReserved /
+// v8 flows: Order.API publishes OrderSubmittedEventV1; Checkout.API (saga) consumes it and publishes
+// ReserveStockRequestedEventV1; Inventory.API consumes that and publishes StockReserved /
 // StockReservationFailed / StockLevelChanged; Checkout.API consumes the reserve results and
 // publishes OrderConfirmed / OrderCancelled (Order.API consumes those); Catalog.API consumes
-// StockLevelChanged to refresh its cached Product.Stock, and ProductUpdatedEvent → Cart.API.
+// StockLevelChanged to refresh its cached Product.Stock, and ProductUpdatedEventV1 → Cart.API.
 var rabbitmq = builder.AddRabbitMQ("rabbitmq")
     .WithManagementPlugin();
 
@@ -44,7 +44,7 @@ var identity = builder.AddProject<Projects.SimpleStore_Identity_API>("identity")
     .WaitFor(identityDb);
 
 // Catalog runs as its own microservice and is the only resource that talks to catalogdb.
-// Publishes ProductUpdatedEvent and consumes OrderSubmittedEvent — both ride the rabbitmq bus.
+// Publishes ProductUpdatedEventV1 and consumes OrderSubmittedEventV1 — both ride the rabbitmq bus.
 var catalog = builder.AddProject<Projects.SimpleStore_Catalog_API>("catalog")
     .WithReference(catalogDb)
     .WithReference(rabbitmq)
@@ -55,7 +55,7 @@ var catalog = builder.AddProject<Projects.SimpleStore_Catalog_API>("catalog")
     .WaitFor(rabbitmq);
 
 // Order runs as its own microservice and is the only resource that talks to orderdb.
-// Publishes OrderSubmittedEvent after checkout.
+// Publishes OrderSubmittedEventV1 after checkout.
 var order = builder.AddProject<Projects.SimpleStore_Order_API>("order")
     .WithReference(orderDb)
     .WithReference(rabbitmq)
@@ -67,7 +67,7 @@ var order = builder.AddProject<Projects.SimpleStore_Order_API>("order")
 
 // Cart runs as its own Redis-backed microservice. Validates JWTs but allows anonymous calls
 // (anonymous carts identify via the X-Cart-Id header set by SimpleStore.Web).
-// Consumes ProductUpdatedEvent to refresh denormalized cart line items.
+// Consumes ProductUpdatedEventV1 to refresh denormalized cart line items.
 var cart = builder.AddProject<Projects.SimpleStore_Cart_API>("cart")
     .WithReference(cartRedis)
     .WithReference(rabbitmq)
@@ -79,7 +79,7 @@ var cart = builder.AddProject<Projects.SimpleStore_Cart_API>("cart")
 
 // Inventory runs as its own microservice with an event-sourced write side (KurrentDB)
 // and a CQRS Postgres read side (inventorydb). v8 wires it onto RabbitMQ: it consumes
-// ReserveStockRequestedEvent from the checkout saga and publishes StockReserved /
+// ReserveStockRequestedEventV1 from the checkout saga and publishes StockReserved /
 // StockReservationFailed / StockLevelChanged. It is now the single source of truth for stock.
 var inventory = builder.AddProject<Projects.SimpleStore_Inventory_API>("inventory")
     .WithReference(inventoryDb)
@@ -102,8 +102,9 @@ var checkout = builder.AddProject<Projects.SimpleStore_Checkout_API>("checkout")
     .WaitFor(rabbitmq);
 
 // YARP-based API gateway. The single entry point Web/Admin use to reach any backend service.
-// Routes /api/v1/<service>/* to the matching backend (path transform strips /v1/) and enforces
-// per-route JWT authorization at the edge.
+// Routes /api/v1/<service>/* to the matching backend and enforces per-route JWT authorization at
+// the edge. v11: backends serve /api/v{version}/... natively (Asp.Versioning.Http URL-segment
+// versioning), so the gateway forwards the version segment through — no more path-strip transform.
 var gateway = builder.AddProject<Projects.SimpleStore_Gateway>("gateway")
     .WithReference(identity)
     .WithReference(catalog)

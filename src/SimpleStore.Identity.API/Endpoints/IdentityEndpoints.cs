@@ -14,7 +14,8 @@ public static class IdentityEndpoints
 {
     public static IEndpointRouteBuilder MapIdentityEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/identity");
+        // v11: routes resolved as /api/v{version}/identity/... — see ApiVersioningExtensions.cs.
+        var group = app.MapApiV1Group("identity");
 
         MapAuthEndpoints(group);
         MapPasskeyEndpoints(group);

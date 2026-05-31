@@ -6,7 +6,8 @@ public static class InventoryEndpoints
     {
         // All inventory endpoints are admin-only in v7. No customer-facing reads:
         // the storefront talks to Catalog (which today still exposes Product.Stock).
-        var group = app.MapGroup("/api/inventory").RequireAuthorization("Admin");
+        // v11: routes resolved as /api/v{version}/inventory/... — see ApiVersioningExtensions.cs.
+        var group = app.MapApiV1Group("inventory").RequireAuthorization("Admin");
 
         group.MapDeliveryNoteEndpoints();
         group.MapReceiptNoteEndpoints();
