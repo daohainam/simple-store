@@ -1,3 +1,5 @@
+using MassTransit;
+
 namespace SimpleStore.Contracts;
 
 /// <summary>
@@ -6,8 +8,11 @@ namespace SimpleStore.Contracts;
 /// Product.Stock cache. Unlike the saga events, this is not correlated to any specific workflow
 /// — it is a broadcast cache refresh.
 /// </summary>
-public sealed record StockLevelChangedEvent
+// v11: wire URN pinned to the pre-v11 default — see OrderSubmittedEvent.cs.
+[MessageUrn("urn:message:SimpleStore.Contracts:StockLevelChangedEvent")]
+public sealed record StockLevelChangedEventV1
 {
+    public int Version { get; init; } = 1;
     public int ProductId { get; init; }
     public int NewOnHand { get; init; }
     public DateTimeOffset ChangedAt { get; init; }
@@ -16,7 +21,7 @@ public sealed record StockLevelChangedEvent
 }
 
 /// <summary>
-/// Well-known values for <see cref="StockLevelChangedEvent.Cause"/>. Use these constants on
+/// Well-known values for <see cref="StockLevelChangedEventV1.Cause"/>. Use these constants on
 /// the publish side so the string never diverges between producer and consumer.
 /// </summary>
 public static class StockChangeCause

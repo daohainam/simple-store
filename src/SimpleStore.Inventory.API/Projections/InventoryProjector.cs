@@ -191,7 +191,7 @@ public sealed partial class InventoryProjector
         if (isLive)
         {
             // Tell the checkout saga the reservation succeeded.
-            await _publish.Publish(new StockReservedEvent
+            await _publish.Publish(new StockReservedEventV1
             {
                 CorrelationId = evt.CorrelationId,
                 ReservationId = evt.NoteId,
@@ -207,7 +207,7 @@ public sealed partial class InventoryProjector
     private async Task PublishStockLevelChangedAsync(
         int productId, int newOnHand, DateTimeOffset at, string cause, CancellationToken ct)
     {
-        await _publish.Publish(new StockLevelChangedEvent
+        await _publish.Publish(new StockLevelChangedEventV1
         {
             ProductId = productId,
             NewOnHand = newOnHand,
@@ -216,7 +216,7 @@ public sealed partial class InventoryProjector
         }, ct);
     }
 
-    // Returns the new OnHand after applying the delta, so the caller can publish StockLevelChangedEvent.
+    // Returns the new OnHand after applying the delta, so the caller can publish StockLevelChangedEventV1.
     private async Task<int> UpsertStockLevelAsync(int productId, int delta, DateTimeOffset at, CancellationToken ct)
     {
         var level = await _db.StockLevels.FirstOrDefaultAsync(s => s.ProductId == productId, ct);

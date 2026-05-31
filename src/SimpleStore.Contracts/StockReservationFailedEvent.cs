@@ -1,3 +1,5 @@
+using MassTransit;
+
 namespace SimpleStore.Contracts;
 
 /// <summary>
@@ -5,8 +7,11 @@ namespace SimpleStore.Contracts;
 /// a reservation request is rejected. Rejected commands emit no domain event by design, so the
 /// handler writes this integration event through its own outbox flush and never touches KurrentDB.
 /// </summary>
-public sealed record StockReservationFailedEvent
+// v11: wire URN pinned to the pre-v11 default — see OrderSubmittedEvent.cs.
+[MessageUrn("urn:message:SimpleStore.Contracts:StockReservationFailedEvent")]
+public sealed record StockReservationFailedEventV1
 {
+    public int Version { get; init; } = 1;
     public Guid CorrelationId { get; init; }
     public Guid ReservationId { get; init; }
     public int OrderId { get; init; }

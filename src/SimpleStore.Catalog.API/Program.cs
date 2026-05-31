@@ -16,6 +16,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 
+// v11: URL-segment API versioning. See Identity.API/Program.cs for rationale.
+builder.AddSimpleStoreApiVersioning();
+
 // v9: EF Core retry-on-failure for transient Postgres errors. See Identity.API/Program.cs for rationale.
 builder.AddNpgsqlDbContext<CatalogDbContext>("catalogdb",
     configureSettings: settings =>
@@ -32,8 +35,8 @@ builder.AddNpgsqlDbContext<CatalogDbContext>("catalogdb",
 
 builder.Services.AddScoped<ICatalogService, CatalogService>();
 
-// MassTransit + RabbitMQ. Catalog.API publishes ProductUpdatedEvent and, in v8, consumes
-// StockLevelChangedEvent from Inventory.API to refresh the denormalized Product.Stock cache.
+// MassTransit + RabbitMQ. Catalog.API publishes ProductUpdatedEventV1 and, in v8, consumes
+// StockLevelChangedEventV1 from Inventory.API to refresh the denormalized Product.Stock cache.
 // (The v7 OrderSubmittedConsumer that decremented stock directly is gone — Inventory owns stock now.)
 builder.Services.AddMassTransit(x =>
 {
@@ -101,7 +104,8 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("Admin", p => p.RequireAuthenticatedUser().RequireRole("Admin"));
 });
 
-builder.Services.AddOpenApi();
+// v11: explicit "v1" document name. See Identity.API/Program.cs.
+builder.Services.AddOpenApi("v1");
 
 var app = builder.Build();
 

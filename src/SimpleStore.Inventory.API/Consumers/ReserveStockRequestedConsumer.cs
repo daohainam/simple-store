@@ -6,14 +6,14 @@ using SimpleStore.Inventory.API.Observability;
 namespace SimpleStore.Inventory.API.Consumers;
 
 /// <summary>
-/// Bridges the checkout saga's ReserveStockRequestedEvent onto the CreateReservationHandler.
+/// Bridges the checkout saga's ReserveStockRequestedEventV1 onto the CreateReservationHandler.
 /// Idempotency is provided by AppendCondition.NoStream in the handler (a redelivered request with
 /// the same ReservationId collapses onto the existing stream), so no inbox is required here.
 ///
 /// v10: uses LoggerMessage source generation — this consumer is on every checkout's hot path
 /// and the cost of one ILogger.LogInformation per request is small but non-zero.
 /// </summary>
-public sealed partial class ReserveStockRequestedConsumer : IConsumer<ReserveStockRequestedEvent>
+public sealed partial class ReserveStockRequestedConsumer : IConsumer<ReserveStockRequestedEventV1>
 {
     private readonly CreateReservationHandler _handler;
     private readonly ILogger<ReserveStockRequestedConsumer> _log;
@@ -26,7 +26,7 @@ public sealed partial class ReserveStockRequestedConsumer : IConsumer<ReserveSto
         _log = log;
     }
 
-    public async Task Consume(ConsumeContext<ReserveStockRequestedEvent> context)
+    public async Task Consume(ConsumeContext<ReserveStockRequestedEventV1> context)
     {
         var msg = context.Message;
 

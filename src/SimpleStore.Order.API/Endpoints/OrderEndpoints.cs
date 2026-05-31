@@ -8,7 +8,8 @@ public static class OrderEndpoints
 {
     public static IEndpointRouteBuilder MapOrderEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/order");
+        // v11: routes resolved as /api/v{version}/order/... — see ApiVersioningExtensions.cs.
+        var group = app.MapApiV1Group("order");
 
         MapUserEndpoints(group);
         MapAdminEndpoints(group);

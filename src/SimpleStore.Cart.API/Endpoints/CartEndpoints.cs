@@ -9,7 +9,8 @@ public static class CartEndpoints
 
     public static IEndpointRouteBuilder MapCartEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/cart");
+        // v11: routes resolved as /api/v{version}/cart/... — see ApiVersioningExtensions.cs.
+        var group = app.MapApiV1Group("cart");
 
         // Cart read/write — open to anonymous (owner key falls back to X-Cart-Id header).
         group.MapGet("", async (HttpContext ctx, ICartStore store, CancellationToken ct) =>

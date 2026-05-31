@@ -24,7 +24,7 @@ public class OrderDbContext : DbContext
             e.Property(o => o.TotalAmount).HasPrecision(18, 2);
             // Store the enum as its name string so the column stays human-readable.
             e.Property(o => o.Status).HasConversion<string>().HasMaxLength(16);
-            // CorrelationId is the saga key — looked up on OrderConfirmedEvent / OrderCancelledEvent.
+            // CorrelationId is the saga key — looked up on OrderConfirmedEventV1 / OrderCancelledEventV1.
             e.HasIndex(o => o.CorrelationId).IsUnique();
         });
 

@@ -8,7 +8,7 @@ namespace SimpleStore.Inventory.API.Domain.Reservations.Events;
 // NoteId   = the reservation id (named NoteId to satisfy IInventoryDomainEvent; the projector
 //            keys streams and read rows off it just like delivery/receipt notes).
 // CorrelationId = the checkout-saga correlation that triggered this reservation, recorded as
-//            provenance so the async projector can stamp it onto the outgoing StockReservedEvent
+//            provenance so the async projector can stamp it onto the outgoing StockReservedEventV1
 //            (the saga keys on it). For non-saga callers (e.g. a future admin reservation) this
 //            may be Guid.Empty.
 // OrderId  = soft reference to Order.API's order (int).

@@ -24,9 +24,9 @@ public sealed class CheckoutSagaStateMachine : MassTransitStateMachine<CheckoutS
     public State Confirmed { get; private set; } = null!;
     public State Cancelled { get; private set; } = null!;
 
-    public Event<OrderSubmittedEvent> OrderSubmitted { get; private set; } = null!;
-    public Event<StockReservedEvent> StockReserved { get; private set; } = null!;
-    public Event<StockReservationFailedEvent> StockReservationFailed { get; private set; } = null!;
+    public Event<OrderSubmittedEventV1> OrderSubmitted { get; private set; } = null!;
+    public Event<StockReservedEventV1> StockReserved { get; private set; } = null!;
+    public Event<StockReservationFailedEventV1> StockReservationFailed { get; private set; } = null!;
 
     public Schedule<CheckoutSagaState, ReservationTimeoutExpired> ReservationTimeout { get; private set; } = null!;
 
@@ -64,7 +64,7 @@ public sealed class CheckoutSagaStateMachine : MassTransitStateMachine<CheckoutS
                     LogTransition(ctx.Saga, "Initial", "AwaitingStock", reason: null);
                 })
                 .Schedule(ReservationTimeout, ctx => new ReservationTimeoutExpired { CorrelationId = ctx.Saga.CorrelationId })
-                .Publish(ctx => new ReserveStockRequestedEvent
+                .Publish(ctx => new ReserveStockRequestedEventV1
                 {
                     CorrelationId = ctx.Saga.CorrelationId,
                     ReservationId = ctx.Saga.ReservationId,
@@ -84,7 +84,7 @@ public sealed class CheckoutSagaStateMachine : MassTransitStateMachine<CheckoutS
                     ctx.Saga.UpdatedAt = DateTime.UtcNow;
                     LogTransition(ctx.Saga, "AwaitingStock", "Confirmed", reason: null);
                 })
-                .Publish(ctx => new OrderConfirmedEvent
+                .Publish(ctx => new OrderConfirmedEventV1
                 {
                     CorrelationId = ctx.Saga.CorrelationId,
                     OrderId = ctx.Saga.OrderId,
@@ -101,7 +101,7 @@ public sealed class CheckoutSagaStateMachine : MassTransitStateMachine<CheckoutS
                     ctx.Saga.UpdatedAt = DateTime.UtcNow;
                     LogTransition(ctx.Saga, "AwaitingStock", "Cancelled", reason: ctx.Message.Reason);
                 })
-                .Publish(ctx => new OrderCancelledEvent
+                .Publish(ctx => new OrderCancelledEventV1
                 {
                     CorrelationId = ctx.Saga.CorrelationId,
                     OrderId = ctx.Saga.OrderId,
@@ -117,7 +117,7 @@ public sealed class CheckoutSagaStateMachine : MassTransitStateMachine<CheckoutS
                     ctx.Saga.UpdatedAt = DateTime.UtcNow;
                     LogTransition(ctx.Saga, "AwaitingStock", "Cancelled", reason: "ReservationTimeout");
                 })
-                .Publish(ctx => new OrderCancelledEvent
+                .Publish(ctx => new OrderCancelledEventV1
                 {
                     CorrelationId = ctx.Saga.CorrelationId,
                     OrderId = ctx.Saga.OrderId,

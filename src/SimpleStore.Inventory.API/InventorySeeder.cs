@@ -10,7 +10,7 @@ public static class InventorySeeder
 {
     // Initial stock per product. These MIRROR SimpleStore.Catalog.API's CatalogSeeder quantities so
     // the two services boot consistent: Catalog's cached Product.Stock equals the Inventory read
-    // model's stock_levels. (Seeded stock can't propagate via StockLevelChangedEvent because the
+    // model's stock_levels. (Seeded stock can't propagate via StockLevelChangedEventV1 because the
     // projector suppresses publishing during the cold-start replay that processes these notes — so
     // both seeders simply agree by construction. Runtime changes DO flow via events.)
     // ProductIds 1..10 are deterministic on a fresh catalogdb (auto-increment insertion order).

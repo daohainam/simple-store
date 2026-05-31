@@ -75,7 +75,7 @@ public class OrderService : IOrderService
         });
 
         // Insert the order first so EF assigns Id values to it and its OrderItems; that Id is what
-        // OrderSubmittedEvent carries to downstream consumers. The second SaveChangesAsync flushes
+        // OrderSubmittedEventV1 carries to downstream consumers. The second SaveChangesAsync flushes
         // the in-memory bus outbox into OutboxMessage. We wrap both in an explicit transaction so
         // a crash between them cannot leave the order persisted without its event queued.
         //
@@ -92,7 +92,7 @@ public class OrderService : IOrderService
             _context.Orders.Add(order);
             await _context.SaveChangesAsync(ct);
 
-            await _publishEndpoint.Publish(new OrderSubmittedEvent
+            await _publishEndpoint.Publish(new OrderSubmittedEventV1
             {
                 CorrelationId = order.CorrelationId,
                 OrderId = order.Id,

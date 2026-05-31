@@ -111,7 +111,7 @@ public class InventoryReadDbContext : DbContext
         });
 
         // MassTransit transactional outbox. v8 wires Inventory onto the bus: the projector
-        // publishes StockReservedEvent / StockLevelChangedEvent inside the same Postgres
+        // publishes StockReservedEventV1 / StockLevelChangedEventV1 inside the same Postgres
         // transaction as the read-model write, and the ReserveStockRequestedConsumer uses the
         // inbox for exactly-once consumption.
         builder.AddInboxStateEntity();

@@ -7,7 +7,8 @@ public static class CatalogEndpoints
 {
     public static IEndpointRouteBuilder MapCatalogEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/catalog");
+        // v11: routes resolved as /api/v{version}/catalog/... — see ApiVersioningExtensions.cs.
+        var group = app.MapApiV1Group("catalog");
 
         MapProductEndpoints(group);
         MapCategoryEndpoints(group);

@@ -12,7 +12,7 @@ internal static class Telemetry
 
     public static readonly Counter<long> ReservationsRequested = Meter.CreateCounter<long>(
         "simplestore.reservations.requested",
-        description: "Count of ReserveStockRequestedEvent messages consumed.");
+        description: "Count of ReserveStockRequestedEventV1 messages consumed.");
 
     public static readonly Counter<long> ReservationsSucceeded = Meter.CreateCounter<long>(
         "simplestore.reservations.succeeded",
@@ -20,7 +20,16 @@ internal static class Telemetry
 
     public static readonly Counter<long> ReservationsFailed = Meter.CreateCounter<long>(
         "simplestore.reservations.failed",
-        description: "Count of reservations that failed stock check and published StockReservationFailedEvent.");
+        description: "Count of reservations that failed stock check and published StockReservationFailedEventV1.");
+
+    // v11: signals a botched event-versioning rollout. The projector skips any envelope whose wire
+    // type isn't registered in EventTypeRegistry (forward-compat: an older replica reading a newer
+    // V2 event shouldn't crash). A non-zero rate here means a V2 was published but the projector
+    // doesn't know about it yet — usually a deploy ordering bug. Tagged with the unknown wire type
+    // so the dashboard alert can name the offending event.
+    public static readonly Counter<long> UnknownEvents = Meter.CreateCounter<long>(
+        "simplestore.inventory.projector.unknown_events",
+        description: "Count of events whose wire type is not registered in EventTypeRegistry. Should be 0 in steady state.");
 
     // Projector lag is observed (callback-based) instead of recorded, because the value is computed
     // by subtracting the projector's last applied checkpoint from KurrentDB's tail position — both

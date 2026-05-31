@@ -11,7 +11,7 @@ namespace SimpleStore.Order.API.Consumers;
 /// Consumed when the checkout saga fails (insufficient stock) or times out. Flips Order.Status
 /// to "Cancelled" on the row matching CorrelationId. The reason is logged for diagnostics.
 /// </summary>
-public sealed class OrderCancelledConsumer : IConsumer<OrderCancelledEvent>
+public sealed class OrderCancelledConsumer : IConsumer<OrderCancelledEventV1>
 {
     private readonly OrderDbContext _context;
     private readonly ILogger<OrderCancelledConsumer> _log;
@@ -22,7 +22,7 @@ public sealed class OrderCancelledConsumer : IConsumer<OrderCancelledEvent>
         _log = log;
     }
 
-    public async Task Consume(ConsumeContext<OrderCancelledEvent> context)
+    public async Task Consume(ConsumeContext<OrderCancelledEventV1> context)
     {
         var msg = context.Message;
 
@@ -34,7 +34,7 @@ public sealed class OrderCancelledConsumer : IConsumer<OrderCancelledEvent>
 
         if (order is null)
         {
-            _log.LogWarning("OrderCancelledEvent for unknown CorrelationId {CorrelationId}", msg.CorrelationId);
+            _log.LogWarning("OrderCancelledEventV1 for unknown CorrelationId {CorrelationId}", msg.CorrelationId);
             return;
         }
 

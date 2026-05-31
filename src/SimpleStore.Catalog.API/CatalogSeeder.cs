@@ -33,7 +33,7 @@ public static class CatalogSeeder
 
             // v8: Inventory.API owns stock. These seed Stock values intentionally MIRROR the receipt
             // notes in SimpleStore.Inventory.API/InventorySeeder.cs so both services boot consistent.
-            // After startup, Product.Stock is a read-only cache refreshed via StockLevelChangedEvent;
+            // After startup, Product.Stock is a read-only cache refreshed via StockLevelChangedEventV1;
             // products created at runtime via the admin API start at Stock = 0 (set via Inventory).
             var products = new List<Product>
             {

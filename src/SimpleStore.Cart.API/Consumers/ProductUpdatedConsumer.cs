@@ -14,7 +14,7 @@ namespace SimpleStore.Cart.API.Consumers;
 /// holds the updated product.
 ///
 /// Cart.API has no DbContext, so MassTransit's EF Core inbox isn't available; we rely on the
-/// consumer being idempotent — re-applying the same ProductUpdatedEvent writes identical field
+/// consumer being idempotent — re-applying the same ProductUpdatedEventV1 writes identical field
 /// values for matching lines, so duplicate delivery is harmless. Quantity and unrelated lines
 /// are untouched.
 ///
@@ -27,7 +27,7 @@ namespace SimpleStore.Cart.API.Consumers;
 /// the scan takes so operators can spot when key count grows past the "small/medium" comfort
 /// zone (the threshold where a reverse index becomes worth maintaining).
 /// </summary>
-public partial class ProductUpdatedConsumer : IConsumer<ProductUpdatedEvent>
+public partial class ProductUpdatedConsumer : IConsumer<ProductUpdatedEventV1>
 {
     private static readonly DistributedCacheEntryOptions EntryOptions = new()
     {
@@ -45,7 +45,7 @@ public partial class ProductUpdatedConsumer : IConsumer<ProductUpdatedEvent>
         _logger = logger;
     }
 
-    public async Task Consume(ConsumeContext<ProductUpdatedEvent> context)
+    public async Task Consume(ConsumeContext<ProductUpdatedEventV1> context)
     {
         var evt = context.Message;
         var ct = context.CancellationToken;
@@ -108,7 +108,7 @@ public partial class ProductUpdatedConsumer : IConsumer<ProductUpdatedEvent>
     [LoggerMessage(
         EventId = 1100,
         Level = LogLevel.Information,
-        Message = "Refreshed {Touched} cart(s) of {Scanned} scanned after ProductUpdatedEvent for ProductId={ProductId} in {ElapsedMs:F1} ms.")]
+        Message = "Refreshed {Touched} cart(s) of {Scanned} scanned after ProductUpdatedEventV1 for ProductId={ProductId} in {ElapsedMs:F1} ms.")]
     private static partial void LogFanoutTouched(
         ILogger logger, int touched, int scanned, int productId, double elapsedMs);
 }

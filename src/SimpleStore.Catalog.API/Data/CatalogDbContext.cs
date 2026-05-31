@@ -22,8 +22,8 @@ public class CatalogDbContext : DbContext
             e.HasIndex(p => p.CategoryId).HasDatabaseName("ix_products_category_id");
         });
 
-        // MassTransit outbox (publish ProductUpdatedEvent) + inbox (idempotent consume of
-        // OrderSubmittedEvent — without this, a redelivered message would decrement Product.Stock twice).
+        // MassTransit outbox (publish ProductUpdatedEventV1) + inbox (idempotent consume of
+        // OrderSubmittedEventV1 — without this, a redelivered message would decrement Product.Stock twice).
         builder.AddInboxStateEntity();
         builder.AddOutboxMessageEntity();
         builder.AddOutboxStateEntity();

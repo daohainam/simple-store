@@ -165,6 +165,10 @@ public sealed class InventoryProjectionService : BackgroundService
             // Unknown event type — checkpoint past it but project nothing.
             // Lets us roll out v2 schemas without crashing the projector if
             // an older replica reads a newer event.
+            // v11: tag the activity + bump the unknown-events counter so a botched V2 deploy is
+            // visible on the dashboard, not just silently skipped (the metric is the alert hook).
+            activity?.SetTag("inventory.unknown_event", envelope.Type);
+            Telemetry.UnknownEvents.Add(1, new KeyValuePair<string, object?>("event_type", envelope.Type));
             _log.LogWarning(
                 "Projector skipped unknown event type {EventType} at position {Position} in stream {Stream}.",
                 envelope.Type, envelope.Position?.ToString() ?? "unknown", envelope.StreamName);

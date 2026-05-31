@@ -16,6 +16,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 
+// v11: URL-segment API versioning. See Identity.API/Program.cs for rationale.
+builder.AddSimpleStoreApiVersioning();
+
 // v9: EF Core retry-on-failure for transient Postgres errors. See Identity.API/Program.cs for rationale.
 builder.AddNpgsqlDbContext<OrderDbContext>("orderdb",
     configureSettings: settings =>
@@ -32,8 +35,8 @@ builder.AddNpgsqlDbContext<OrderDbContext>("orderdb",
 
 builder.Services.AddScoped<IOrderService, OrderService>();
 
-// MassTransit + RabbitMQ. Order.API publishes OrderSubmittedEvent and consumes the saga's
-// OrderConfirmedEvent / OrderCancelledEvent to flip Order.Status.
+// MassTransit + RabbitMQ. Order.API publishes OrderSubmittedEventV1 and consumes the saga's
+// OrderConfirmedEventV1 / OrderCancelledEventV1 to flip Order.Status.
 // EF Core outbox: IPublishEndpoint.Publish writes to OutboxMessage table inside the same
 // DB transaction as the order; a hosted bus delivers from the outbox asynchronously.
 // EF Core inbox makes the consumes exactly-once on retry.
@@ -107,7 +110,8 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("Admin", p => p.RequireAuthenticatedUser().RequireRole("Admin"));
 });
 
-builder.Services.AddOpenApi();
+// v11: explicit "v1" document name. See Identity.API/Program.cs.
+builder.Services.AddOpenApi("v1");
 
 var app = builder.Build();
 
