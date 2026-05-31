@@ -67,14 +67,23 @@ public class CatalogApiTests
     [Fact]
     public async Task GetProducts_SearchByName_ReturnsMatchingProducts()
     {
-        var response = await _client.GetAsync("/api/v1/catalog/products?search=Headphones");
+        // First get a product name to search for (avoids hardcoding seed data assumptions)
+        var listResponse = await _client.GetAsync("/api/v1/catalog/products?pageSize=1");
+        listResponse.EnsureSuccessStatusCode();
+        var list = await listResponse.Content.ReadFromJsonAsync<PagedResult<ProductDto>>();
+        Assert.NotNull(list);
+        Assert.True(list.Items.Count > 0);
+
+        var searchTerm = list.Items[0].Name.Split(' ')[0]; // Use the first word of the product name
+
+        var response = await _client.GetAsync($"/api/v1/catalog/products?search={searchTerm}");
 
         response.EnsureSuccessStatusCode();
         var result = await response.Content.ReadFromJsonAsync<PagedResult<ProductDto>>();
 
         Assert.NotNull(result);
         Assert.True(result.Items.Count > 0);
-        Assert.Contains(result.Items, p => p.Name.Contains("Headphones", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Items, p => p.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
