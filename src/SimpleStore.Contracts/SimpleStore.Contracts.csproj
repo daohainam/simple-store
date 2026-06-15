@@ -13,7 +13,7 @@
       transport, no DI, just the attributes/markers. Every existing consumer already references
       a heavier MassTransit package, so adding this here adds nothing transitively.
     -->
-    <PackageReference Include="MassTransit.Abstractions" Version="8.5.2" />
+    <PackageReference Include="MassTransit.Abstractions" Version="9.1.2" />
   </ItemGroup>
 
 </Project>

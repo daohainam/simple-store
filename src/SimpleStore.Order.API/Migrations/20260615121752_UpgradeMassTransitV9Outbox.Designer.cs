@@ -2,18 +2,21 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
-using SimpleStore.Catalog.API.Data;
+using SimpleStore.Order.API.Data;
 
 #nullable disable
 
-namespace SimpleStore.Catalog.API.Migrations
+namespace SimpleStore.Order.API.Migrations
 {
-    [DbContext(typeof(CatalogDbContext))]
-    partial class CatalogDbContextModelSnapshot : ModelSnapshot
+    [DbContext(typeof(OrderDbContext))]
+    [Migration("20260615121752_UpgradeMassTransitV9Outbox")]
+    partial class UpgradeMassTransitV9Outbox
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -196,7 +199,7 @@ namespace SimpleStore.Catalog.API.Migrations
                     b.ToTable("OutboxState");
                 });
 
-            modelBuilder.Entity("SimpleStore.Catalog.API.Models.Category", b =>
+            modelBuilder.Entity("SimpleStore.Order.API.Models.Order", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -204,22 +207,40 @@ namespace SimpleStore.Catalog.API.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<string>("Description")
+                    b.Property<Guid>("CorrelationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("OrderDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ShippingAddress")
                         .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
-                    b.Property<string>("Name")
+                    b.Property<string>("Status")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<decimal>("TotalAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
 
                     b.HasKey("Id");
 
-                    b.ToTable("Categories");
+                    b.HasIndex("CorrelationId")
+                        .IsUnique();
+
+                    b.ToTable("Orders");
                 });
 
-            modelBuilder.Entity("SimpleStore.Catalog.API.Models.Product", b =>
+            modelBuilder.Entity("SimpleStore.Order.API.Models.OrderItem", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -227,37 +248,29 @@ namespace SimpleStore.Catalog.API.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<int>("CategoryId")
+                    b.Property<int>("OrderId")
                         .HasColumnType("integer");
 
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
+                    b.Property<int>("ProductId")
+                        .HasColumnType("integer");
 
-                    b.Property<string>("ImageUrl")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<string>("Name")
+                    b.Property<string>("ProductName")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<decimal>("Price")
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("UnitPrice")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
-                    b.Property<int>("Stock")
-                        .HasColumnType("integer");
-
                     b.HasKey("Id");
 
-                    b.HasIndex("CategoryId")
-                        .HasDatabaseName("ix_products_category_id");
+                    b.HasIndex("OrderId");
 
-                    b.ToTable("Products");
+                    b.ToTable("OrderItems");
                 });
 
             modelBuilder.Entity("MassTransit.EntityFrameworkCoreIntegration.OutboxMessage", b =>
@@ -272,20 +285,20 @@ namespace SimpleStore.Catalog.API.Migrations
                         .HasPrincipalKey("MessageId", "ConsumerId");
                 });
 
-            modelBuilder.Entity("SimpleStore.Catalog.API.Models.Product", b =>
+            modelBuilder.Entity("SimpleStore.Order.API.Models.OrderItem", b =>
                 {
-                    b.HasOne("SimpleStore.Catalog.API.Models.Category", "Category")
-                        .WithMany("Products")
-                        .HasForeignKey("CategoryId")
+                    b.HasOne("SimpleStore.Order.API.Models.Order", "Order")
+                        .WithMany("Items")
+                        .HasForeignKey("OrderId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Category");
+                    b.Navigation("Order");
                 });
 
-            modelBuilder.Entity("SimpleStore.Catalog.API.Models.Category", b =>
+            modelBuilder.Entity("SimpleStore.Order.API.Models.Order", b =>
                 {
-                    b.Navigation("Products");
+                    b.Navigation("Items");
                 });
 #pragma warning restore 612, 618
         }

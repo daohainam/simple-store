@@ -17,7 +17,7 @@ namespace SimpleStore.Order.API.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.8")
+                .HasAnnotation("ProductVersion", "10.0.9")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -166,6 +166,10 @@ namespace SimpleStore.Order.API.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("BusName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
 
@@ -186,6 +190,8 @@ namespace SimpleStore.Order.API.Migrations
                     b.HasKey("OutboxId");
 
                     b.HasIndex("Created");
+
+                    b.HasIndex("BusName", "Created");
 
                     b.ToTable("OutboxState");
                 });
