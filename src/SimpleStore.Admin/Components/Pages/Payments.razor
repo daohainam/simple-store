@@ -1,0 +1,168 @@
+@page "/payments"
+@attribute [Authorize(Roles = "Admin")]
+@inject IIdentityApiClient Identity
+@inject IPaymentApiClient PaymentApi
+
+<PageTitle>Payments</PageTitle>
+
+<header class="page-header">
+    <div>
+        <h1>Payments</h1>
+        <p class="page-subtitle">Customer wallet balances. Deposit on a customer's behalf to set up a demo — the checkout saga charges this balance.</p>
+    </div>
+</header>
+
+@if (!string.IsNullOrWhiteSpace(message))
+{
+    <div class="alert alert-info" role="alert">@message</div>
+}
+
+@if (isLoading)
+{
+    <p>Loading accounts...</p>
+}
+else
+{
+    <div class="card shadow-sm border-0">
+        <div class="card-body table-responsive">
+            <table class="table align-middle">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th class="text-end">Balance</th>
+                        <th style="width: 320px;">Deposit</th>
+                        <th class="text-end">History</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in rows)
+                    {
+                        <tr>
+                            <td>@row.FullName</td>
+                            <td>@row.Email</td>
+                            <td class="text-end fw-semibold">$@row.Balance.ToString("N2")</td>
+                            <td>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text">$</span>
+                                    <input type="number" min="0.01" step="0.01" class="form-control" @bind="row.DepositAmount" />
+                                    <button class="btn btn-outline-primary" @onclick="() => DepositAsync(row)">Deposit</button>
+                                </div>
+                            </td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => ViewTransactionsAsync(row)">View</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    @if (selectedUser is not null)
+    {
+        <div class="card shadow-sm border-0 mt-4">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <strong>Transactions — @selectedUser</strong>
+                <button class="btn-close" @onclick="() => selectedUser = null"></button>
+            </div>
+            <div class="card-body table-responsive">
+                @if (selectedTransactions.Count == 0)
+                {
+                    <p class="text-muted mb-0">No transactions yet.</p>
+                }
+                else
+                {
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th>Description</th>
+                                <th class="text-end">Amount</th>
+                                <th class="text-end">Balance</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var t in selectedTransactions)
+                            {
+                                <tr>
+                                    <td>@t.CreatedAt.ToString("MMM dd, HH:mm")</td>
+                                    <td><span class="badge @(t.Type == "Deposit" ? "text-bg-success" : "text-bg-secondary")">@t.Type</span></td>
+                                    <td>@t.Description</td>
+                                    <td class="text-end">@(t.Type == "Deposit" ? "+" : "-")$@t.Amount.ToString("N2")</td>
+                                    <td class="text-end">$@t.BalanceAfter.ToString("N2")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private readonly List<AccountRow> rows = [];
+    private bool isLoading = true;
+    private string? message;
+
+    private string? selectedUser;
+    private List<TransactionDto> selectedTransactions = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        rows.Clear();
+
+        // Single bulk fetch from each service; dictionary-join in memory (same pattern as Customers).
+        var users = await Identity.GetUsersAsync(page: 1, pageSize: 100);
+        var accounts = await PaymentApi.GetAccountsAsync(page: 1, pageSize: 100);
+        var balByUser = accounts.Items.ToDictionary(a => a.UserId, a => a.Balance);
+
+        foreach (var user in users.Items)
+        {
+            rows.Add(new AccountRow
+            {
+                Id = user.Id,
+                FullName = user.FullName,
+                Email = user.Email,
+                Balance = balByUser.GetValueOrDefault(user.Id)
+            });
+        }
+
+        isLoading = false;
+    }
+
+    private async Task DepositAsync(AccountRow row)
+    {
+        if (row.DepositAmount <= 0)
+        {
+            message = "Deposit amount must be positive.";
+            return;
+        }
+
+        var account = await PaymentApi.DepositForUserAsync(row.Id, row.DepositAmount);
+        row.Balance = account.Balance;
+        message = $"Deposited ${row.DepositAmount:N2} to {row.Email}. New balance: ${account.Balance:N2}.";
+    }
+
+    private async Task ViewTransactionsAsync(AccountRow row)
+    {
+        selectedUser = row.Email;
+        selectedTransactions = (await PaymentApi.GetTransactionsForUserAsync(row.Id)).ToList();
+    }
+
+    private sealed class AccountRow
+    {
+        public string Id { get; set; } = string.Empty;
+        public string FullName { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public decimal Balance { get; set; }
+        public decimal DepositAmount { get; set; } = 100m;
+    }
+}

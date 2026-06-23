@@ -5,6 +5,7 @@ using SimpleStore.Admin.Services.Auth;
 using SimpleStore.Catalog.API.Client;
 using SimpleStore.Identity.API.Client;
 using SimpleStore.Order.API.Client;
+using SimpleStore.Payment.API.Client;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,6 +27,7 @@ builder.Services.AddTransient<BearerTokenHandler>();
 builder.AddCatalogApiClient().AddHttpMessageHandler<BearerTokenHandler>();
 builder.AddIdentityApiClient().AddHttpMessageHandler<BearerTokenHandler>();
 builder.AddOrderApiClient().AddHttpMessageHandler<BearerTokenHandler>();
+builder.AddPaymentApiClient().AddHttpMessageHandler<BearerTokenHandler>();
 
 // JWT bearer — same Jwt:Issuer/Audience/Key as Identity.API. OnMessageReceived lifts
 // the token out of the server-side cache via ss_session cookie.

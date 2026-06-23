@@ -5,13 +5,14 @@ namespace SimpleStore.Inventory.API.Domain.Reservations;
 
 // DDD aggregate root: a temporary stock hold for an order (stock OUT).
 //
-// In v8 a Reservation is single-shot like DeliveryNote / ReceiptNote: it can only be reserved,
-// and the StockReservedV1 projection decrements stock_levels.OnHand immediately. v9 will add
-// Commit (convert to a delivery note when the order ships) and Cancel (release the hold when an
-// order is cancelled) behaviors plus the matching domain events.
+// A Reservation is reserved once (StockReservedV1 decrements stock_levels.OnHand immediately) and
+// can then be released. v12 adds Cancel (release the hold when payment fails) plus the matching
+// StockReservationCancelledV1 event — the projector adds the held quantity back to OnHand. Commit
+// (convert to a delivery note when the order ships) is still future work.
 //
-// At the store level, single-issuance is enforced by appending with StreamState.NoStream — a
-// saga retry with the same ReservationId collapses onto the same stream and returns 409.
+// At the store level, the initial reserve is enforced with StreamState.NoStream (a saga retry with
+// the same ReservationId collapses onto the same stream and returns 409); the cancel appends with
+// the expected stream revision so a redelivered cancel also collapses to a no-op.
 public sealed class Reservation
 {
     public Guid Id { get; private set; }
@@ -20,9 +21,14 @@ public sealed class Reservation
     public DateTimeOffset ReservedAt { get; private set; }
     public IReadOnlyList<InventoryLine> Lines => _lines;
 
+    // True once the reservation has been released (StockReservationCancelledV1 applied). Lets the
+    // CancelReservationHandler treat a redelivered cancel request as an idempotent no-op.
+    public bool IsCancelled => _cancelled;
+
     private readonly List<InventoryLine> _lines = [];
     private readonly List<IInventoryDomainEvent> _uncommitted = [];
     private bool _reserved;
+    private bool _cancelled;
 
     public IReadOnlyList<IInventoryDomainEvent> UncommittedEvents => _uncommitted;
     public void MarkEventsCommitted() => _uncommitted.Clear();
@@ -80,6 +86,35 @@ public sealed class Reservation
         return reservation;
     }
 
+    // Releases the hold. Emits StockReservationCancelledV1 carrying the reserved lines so the
+    // projector knows how much stock to return to OnHand. Guarded so a double-cancel is rejected;
+    // callers that may redeliver should check IsCancelled (after Rehydrate) first.
+    public void Cancel(DateTimeOffset now)
+    {
+        if (!_reserved)
+            throw new DomainException("Cannot cancel a reservation that was never reserved.");
+        if (_cancelled)
+            throw new DomainException("Reservation has already been cancelled.");
+
+        var evt = new StockReservationCancelledV1
+        {
+            NoteId = Id,
+            CorrelationId = CorrelationId,
+            OrderId = OrderId,
+            CancelledAt = now,
+            Lines = _lines
+                .Select(l => new StockReservationCancelledV1.LineData
+                {
+                    ProductId = l.ProductId,
+                    Quantity = l.Quantity
+                })
+                .ToList()
+        };
+
+        Apply(evt);
+        _uncommitted.Add(evt);
+    }
+
     private void Apply(IInventoryDomainEvent @event)
     {
         switch (@event)
@@ -93,6 +128,13 @@ public sealed class Reservation
                 ReservedAt = reserved.ReservedAt;
                 _lines.AddRange(reserved.Lines.Select(l => new InventoryLine(l.ProductId, l.Quantity)));
                 _reserved = true;
+                break;
+            case StockReservationCancelledV1:
+                if (!_reserved)
+                    throw new DomainException("Cannot cancel a reservation that was never reserved.");
+                if (_cancelled)
+                    throw new DomainException("Reservation has already been cancelled.");
+                _cancelled = true;
                 break;
             default:
                 throw new DomainException(

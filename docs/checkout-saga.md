@@ -2,6 +2,8 @@
 
 > Introduced in **v8**. This document is the design spec for the cross-service workflow that turns a submitted order into either a **Confirmed** order with reserved stock, or a **Cancelled** order with no stock impact.
 
+> **Updated in v12.** A **payment step** now sits between stock reservation and confirmation, and a **stock-release compensation** runs when payment fails. The v8 state machine below (`AwaitingStock → Confirmed | Cancelled`) is extended to `AwaitingStock → AwaitingPayment → Confirmed`, or `… → CompensatingStock → Cancelled`. The §13 "deferred to v9" items for reservation cancel / orphan compensation are now implemented. See [payment-service.md](payment-service.md) and [v12-changes.md](v12-changes.md); the v12 flow is summarized in §15 at the bottom of this doc.
+
 ---
 
 ## 1. Purpose
@@ -448,9 +450,9 @@ The stream name pattern is **`reservation-{guid}`** (lowercase noun + hyphen + G
 
 ### Out of scope for v8
 
-1. **Reservation Commit** — once an order ships, the reservation should be converted into a `DeliveryNote`. v9 adds `Reservation.Commit(now)` which emits `StockReservationCommittedV1` (no stock movement — already debited) plus issues a `DeliveryNote` for the audit trail.
-2. **Reservation Cancel** — when an order is cancelled (admin action or saga timeout compensation), stock should be released. v9 adds `Reservation.Cancel(now)` which emits `StockReservationCancelledV1`; the projector adds stock back to `OnHand`.
-3. **Orphan reservation compensation** — when the saga times out, also publish a `CancelStockReservationRequestedEvent`. Inventory consumes it and, retrying with backoff, cancels the reservation once it exists in the event store. Closes the §11.3 gap.
+1. **Reservation Commit** — once an order ships, the reservation should be converted into a `DeliveryNote`. A future version adds `Reservation.Commit(now)` which emits `StockReservationCommittedV1` (no stock movement — already debited) plus issues a `DeliveryNote` for the audit trail. *(Still future work as of v12.)*
+2. **Reservation Cancel** — ✅ **Implemented in v12.** When payment fails after stock was reserved, the saga publishes `StockReservationCancelRequestedEventV1`; `Reservation.Cancel(now)` emits `StockReservationCancelledV1`; the projector adds stock back to `OnHand` and replies `StockReservationCancelledEventV1`. See §15 + [payment-service.md](payment-service.md).
+3. **Orphan reservation compensation** — ✅ **Largely addressed in v12.** The saga now actively compensates: on payment failure *or* payment timeout it publishes `StockReservationCancelRequestedEventV1` and waits for the release before cancelling. The §11.3 stock-timeout window (broker recovers after the *stock* timeout, producing a reservation for an already-cancelled order) remains the one uncompensated edge, since that reservation never reaches the payment step.
 4. **Admin reservation read endpoints** — `GET /api/inventory/reservations` (paged), `GET /api/inventory/reservations/{id}`. Useful for operations visibility but not required for the saga to function.
 5. **Per-product event-stream availability** — replace `SELECT FOR UPDATE` on `stock_levels` with a per-product KurrentDB stream and optimistic concurrency. Removes the read-after-write race window in §10.3 and allows true parallelism across products.
 
@@ -460,7 +462,7 @@ After `POST /api/order/orders`, Web shows the order page with status `Pending`. 
 
 ### Stock decrement timing
 
-`StockReservedV1` immediately decrements `stock_levels.OnHand`. Without v9's Cancel, a cancelled order's stock decrement is **permanent** in v8 — the books don't balance for cancelled orders. This is acceptable for the demo (cancellation is rare and operational cleanup is possible via a compensating receipt note), but is the strongest reason to ship v9 before declaring the saga production-grade.
+`StockReservedV1` immediately decrements `stock_levels.OnHand`. In v8 a cancelled order's decrement was **permanent** — the books didn't balance for cancelled orders. **v12 fixes this for the payment-failure path:** the `CompensatingStock` state releases the reservation (`Reservation.Cancel` → projector adds the quantity back to `OnHand`) before the order is cancelled. A reservation that fails the *stock* check never decremented anything, and the rare §11.3 stock-timeout orphan is the remaining gap.
 
 ---
 
@@ -475,3 +477,49 @@ After `POST /api/order/orders`, Web shows the order page with status `Pending`. 
 | Understand why the failure event isn't event-sourced | §5.1 (`StockReservationFailedEvent`), §7 |
 | Reason about replays after a DB wipe | §10.1 |
 | Plan v9 work | §13 |
+| Understand the v12 payment step + compensation | §15 |
+
+---
+
+## 15. v12 — payment step + stock-release compensation
+
+v12 inserts a payment step after stock reservation, making the **account balance the controllable gate** for a checkout's outcome, and giving the saga a real **compensation** to run when payment fails.
+
+### Extended state machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> AwaitingStock : OrderSubmitted\npublish ReserveStockRequested\nschedule ReservationTimeout (+30s)
+    AwaitingStock --> AwaitingPayment : StockReserved\nunschedule ReservationTimeout\npublish ProcessPaymentRequested\nschedule PaymentTimeout (+30s)
+    AwaitingStock --> Cancelled : StockReservationFailed / ReservationTimeout\npublish OrderCancelled
+    AwaitingPayment --> Confirmed : PaymentSucceeded\nunschedule PaymentTimeout\npublish OrderConfirmed
+    AwaitingPayment --> CompensatingStock : PaymentFailed / PaymentTimeout\nstore reason\npublish StockReservationCancelRequested
+    CompensatingStock --> Cancelled : StockReservationCancelled\npublish OrderCancelled (reason)
+    Confirmed --> [*]
+    Cancelled --> [*]
+```
+
+### New events
+
+| Event | Direction | Carries CorrelationId? |
+|---|---|---|
+| `ProcessPaymentRequestedEventV1` | Checkout → Payment | ✅ |
+| `PaymentSucceededEventV1` | Payment → Checkout | ✅ |
+| `PaymentFailedEventV1` | Payment → Checkout | ✅ |
+| `StockReservationCancelRequestedEventV1` | Checkout → Inventory | ✅ |
+| `StockReservationCancelledEventV1` | Inventory → Checkout | ✅ |
+
+### New saga state fields
+
+`CheckoutSagaState` gains `decimal Amount` (order total, from `OrderSubmittedEventV1.TotalAmount`, passed to Payment) and `Guid? PaymentTimeoutTokenId` (the second Quartz schedule token). Migration `AddPaymentToSaga`.
+
+### Idempotency (additions to §9)
+
+| Consumer | Mechanism |
+|---|---|
+| Payment / `ProcessPaymentRequestedEvent` | EF inbox on `PaymentDbContext` → exactly-once; no double-charge on redelivery. |
+| Saga / `PaymentSucceeded` & `PaymentFailed` | Honored only in `AwaitingPayment`. |
+| Inventory / `StockReservationCancelRequested` | `CancelReservationHandler` rehydrates the aggregate, no-ops if already cancelled, and appends with an expected-revision condition (a racing redelivery hits `ConcurrencyConflictException`, treated as success). |
+| Saga / `StockReservationCancelled` | Honored only in `CompensatingStock`. |
+
+The compensation is described in full in [payment-service.md](payment-service.md) and [v12-changes.md](v12-changes.md).

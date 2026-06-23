@@ -4,6 +4,7 @@ using SimpleStore.Cart.API.Client;
 using SimpleStore.Catalog.API.Client;
 using SimpleStore.Identity.API.Client;
 using SimpleStore.Order.API.Client;
+using SimpleStore.Payment.API.Client;
 using SimpleStore.Web.Services.Auth;
 using SimpleStore.Web.Services.Cart;
 
@@ -28,6 +29,7 @@ builder.Services.AddTransient<BearerTokenHandler>();
 builder.AddCatalogApiClient().AddHttpMessageHandler<BearerTokenHandler>();
 builder.AddIdentityApiClient();
 builder.AddOrderApiClient().AddHttpMessageHandler<BearerTokenHandler>();
+builder.AddPaymentApiClient().AddHttpMessageHandler<BearerTokenHandler>();
 builder.AddCartApiClient()
     .AddHttpMessageHandler<BearerTokenHandler>()
     .AddHttpMessageHandler<CartIdHandler>();

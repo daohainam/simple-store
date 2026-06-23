@@ -74,6 +74,7 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<CreateDeliveryNoteHandler>();
 builder.Services.AddScoped<CreateReceiptNoteHandler>();
 builder.Services.AddScoped<CreateReservationHandler>();
+builder.Services.AddScoped<CancelReservationHandler>();
 builder.Services.AddScoped<InventoryProjector>();
 builder.Services.AddScoped<CheckpointStore>();
 builder.Services.AddHostedService<InventoryProjectionService>();
@@ -91,6 +92,7 @@ builder.Services.AddMassTransit(x =>
         o.UseBusOutbox();
     });
     x.AddConsumer<ReserveStockRequestedConsumer>();
+    x.AddConsumer<CancelReservationRequestedConsumer>();
     x.UsingRabbitMq((ctx, cfg) =>
     {
         // v9: Rabbit heartbeat + MassTransit retry/CB. See Order.API/Program.cs for rationale.

@@ -22,6 +22,12 @@ internal static class Telemetry
         "simplestore.reservations.failed",
         description: "Count of reservations that failed stock check and published StockReservationFailedEventV1.");
 
+    // v12: the compensation. Incremented when a reservation is released (payment failed after the
+    // stock was reserved) and the held quantity is returned to OnHand.
+    public static readonly Counter<long> ReservationsCancelled = Meter.CreateCounter<long>(
+        "simplestore.reservations.cancelled",
+        description: "Count of reservations released (compensation) — stock returned to OnHand.");
+
     // v11: signals a botched event-versioning rollout. The projector skips any envelope whose wire
     // type isn't registered in EventTypeRegistry (forward-compat: an older replica reading a newer
     // V2 event shouldn't crash). A non-zero rate here means a V2 was published but the projector

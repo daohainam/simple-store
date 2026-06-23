@@ -13,6 +13,7 @@
     <ProjectReference Include="..\SimpleStore.Catalog.API.Client\SimpleStore.Catalog.API.Client.csproj" />
     <ProjectReference Include="..\SimpleStore.Identity.API.Client\SimpleStore.Identity.API.Client.csproj" />
     <ProjectReference Include="..\SimpleStore.Order.API.Client\SimpleStore.Order.API.Client.csproj" />
+    <ProjectReference Include="..\SimpleStore.Payment.API.Client\SimpleStore.Payment.API.Client.csproj" />
     <ProjectReference Include="..\SimpleStore.ServiceDefaults\SimpleStore.ServiceDefaults.csproj" />
   </ItemGroup>
 </Project>
