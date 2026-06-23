@@ -8,6 +8,7 @@ var orderDb = postgres.AddDatabase("orderdb");
 var identityDb = postgres.AddDatabase("identitydb");
 var inventoryDb = postgres.AddDatabase("inventorydb");
 var checkoutDb = postgres.AddDatabase("checkoutdb");
+var paymentDb = postgres.AddDatabase("paymentdb");
 
 // Cart.API stores its state in Redis; RedisInsight gives a dev-only UI.
 var cartRedis = builder.AddRedis("cart-redis")
@@ -93,12 +94,25 @@ var inventory = builder.AddProject<Projects.SimpleStore_Inventory_API>("inventor
     .WaitFor(rabbitmq);
 
 // Checkout runs the MassTransit saga that orchestrates the create-order → reserve-stock →
-// confirm/cancel flow. Pure orchestrator: no HTTP surface, no JWT. Owns checkoutdb (saga state)
-// and rides RabbitMQ. Not referenced by the gateway (nothing calls it over HTTP).
+// process-payment → confirm/cancel flow. Pure orchestrator: no HTTP surface, no JWT. Owns
+// checkoutdb (saga state) and rides RabbitMQ. Not referenced by the gateway (nothing calls it over HTTP).
 var checkout = builder.AddProject<Projects.SimpleStore_Checkout_API>("checkout")
     .WithReference(checkoutDb)
     .WithReference(rabbitmq)
     .WaitFor(checkoutDb)
+    .WaitFor(rabbitmq);
+
+// Payment runs as its own microservice and is the only resource that talks to paymentdb (v12).
+// It consumes ProcessPaymentRequestedEventV1 from the checkout saga and publishes
+// PaymentSucceededEventV1 / PaymentFailedEventV1 based on the customer's account balance — the
+// controllable gate that lets a demo drive a checkout to Confirmed or to Cancelled (+ stock release).
+var payment = builder.AddProject<Projects.SimpleStore_Payment_API>("payment")
+    .WithReference(paymentDb)
+    .WithReference(rabbitmq)
+    .WithEnvironment("Jwt__Key", jwtKey)
+    .WithEnvironment("Jwt__Issuer", jwtIssuer)
+    .WithEnvironment("Jwt__Audience", jwtAudience)
+    .WaitFor(paymentDb)
     .WaitFor(rabbitmq);
 
 // YARP-based API gateway. The single entry point Web/Admin use to reach any backend service.
@@ -111,6 +125,7 @@ var gateway = builder.AddProject<Projects.SimpleStore_Gateway>("gateway")
     .WithReference(order)
     .WithReference(cart)
     .WithReference(inventory)
+    .WithReference(payment)
     .WithEnvironment("Jwt__Key", jwtKey)
     .WithEnvironment("Jwt__Issuer", jwtIssuer)
     .WithEnvironment("Jwt__Audience", jwtAudience)
@@ -118,7 +133,8 @@ var gateway = builder.AddProject<Projects.SimpleStore_Gateway>("gateway")
     .WaitFor(catalog)
     .WaitFor(order)
     .WaitFor(cart)
-    .WaitFor(inventory);
+    .WaitFor(inventory)
+    .WaitFor(payment);
 
 var web = builder.AddProject<Projects.SimpleStore_Web>("web")
     .WithReference(gateway)

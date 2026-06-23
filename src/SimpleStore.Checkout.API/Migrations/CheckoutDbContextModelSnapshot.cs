@@ -64,6 +64,8 @@ namespace SimpleStore.Checkout.API.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasAlternateKey("MessageId", "ConsumerId");
+
                     b.HasIndex("Delivered");
 
                     b.ToTable("InboxState");
@@ -201,6 +203,9 @@ namespace SimpleStore.Checkout.API.Migrations
                     b.Property<Guid>("CorrelationId")
                         .HasColumnType("uuid");
 
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -215,6 +220,9 @@ namespace SimpleStore.Checkout.API.Migrations
 
                     b.Property<int>("OrderId")
                         .HasColumnType("integer");
+
+                    b.Property<Guid?>("PaymentTimeoutTokenId")
+                        .HasColumnType("uuid");
 
                     b.Property<Guid>("ReservationId")
                         .HasColumnType("uuid");

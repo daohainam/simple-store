@@ -204,6 +204,59 @@ public sealed partial class InventoryProjector
         }
     }
 
+    // v12: the compensation. Releases a reservation, returning the held quantity to OnHand and
+    // marking the read row Cancelled. Idempotent: a reservation already Cancelled (or missing) is
+    // skipped, so a replayed/redelivered cancel never double-restores stock.
+    public async Task ApplyStockReservationCancelledAsync(StockReservationCancelledV1 evt, bool isLive, CancellationToken ct)
+    {
+        var reservation = await _db.Reservations.FirstOrDefaultAsync(r => r.Id == evt.NoteId, ct);
+        if (reservation is null)
+        {
+            // Reserve not yet projected (shouldn't happen — cancel follows a successful reserve) or wiped.
+            LogSkippedAlreadyProjected(_log, "StockReservationCancelledV1(no-row)", evt.NoteId);
+            return;
+        }
+        if (reservation.Status != "Active")
+        {
+            LogSkippedAlreadyProjected(_log, "StockReservationCancelledV1", evt.NoteId);
+            return;
+        }
+        LogApplyReservationCancelled(_log, evt.NoteId, evt.OrderId, evt.CorrelationId, evt.Lines.Count, isLive);
+
+        reservation.Status = "Cancelled";
+
+        foreach (var line in evt.Lines)
+        {
+            // Positive delta = stock IN (releasing the hold returns it to available stock).
+            _db.StockMovements.Add(new StockMovementRow
+            {
+                ProductId = line.ProductId,
+                Delta = line.Quantity,
+                MovementType = ReservationCancelled,
+                SourceNoteId = evt.NoteId,
+                OccurredAt = evt.CancelledAt,
+            });
+            var newOnHand = await UpsertStockLevelAsync(line.ProductId, line.Quantity, evt.CancelledAt, ct);
+            if (isLive)
+                await PublishStockLevelChangedAsync(line.ProductId, newOnHand, evt.CancelledAt, ReservationCancelled, ct);
+        }
+
+        if (isLive)
+        {
+            // Tell the checkout saga the compensation completed so it can finalize the cancellation.
+            await _publish.Publish(new StockReservationCancelledEventV1
+            {
+                CorrelationId = evt.CorrelationId,
+                ReservationId = evt.NoteId,
+                OrderId = evt.OrderId,
+                CancelledAt = evt.CancelledAt,
+                Lines = evt.Lines
+                    .Select(l => new ReservationLineItem { ProductId = l.ProductId, Quantity = l.Quantity })
+                    .ToList(),
+            }, ct);
+        }
+    }
+
     private async Task PublishStockLevelChangedAsync(
         int productId, int newOnHand, DateTimeOffset at, string cause, CancellationToken ct)
     {
@@ -263,5 +316,12 @@ public sealed partial class InventoryProjector
         Level = LogLevel.Information,
         Message = "Projector applied StockReservedV1 {ReservationId} for order {OrderId} (correlation {CorrelationId}, {LineCount} lines, isLive={IsLive}).")]
     private static partial void LogApplyReservation(
+        ILogger logger, Guid reservationId, int orderId, Guid correlationId, int lineCount, bool isLive);
+
+    [LoggerMessage(
+        EventId = 1304,
+        Level = LogLevel.Information,
+        Message = "Projector applied StockReservationCancelledV1 {ReservationId} for order {OrderId} (correlation {CorrelationId}, {LineCount} lines, isLive={IsLive}).")]
+    private static partial void LogApplyReservationCancelled(
         ILogger logger, Guid reservationId, int orderId, Guid correlationId, int lineCount, bool isLive);
 }

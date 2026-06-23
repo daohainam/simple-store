@@ -16,6 +16,8 @@
     <Project Path="src/SimpleStore.Inventory.API/SimpleStore.Inventory.API.csproj" />
     <Project Path="src/SimpleStore.Order.API.Client/SimpleStore.Order.API.Client.csproj" />
     <Project Path="src/SimpleStore.Order.API/SimpleStore.Order.API.csproj" />
+    <Project Path="src/SimpleStore.Payment.API.Client/SimpleStore.Payment.API.Client.csproj" />
+    <Project Path="src/SimpleStore.Payment.API/SimpleStore.Payment.API.csproj" />
     <Project Path="src/SimpleStore.Web/SimpleStore.Web.csproj" />
   </Folder>
   <Project Path="src/SimpleStore.AppHost/SimpleStore.AppHost.csproj" Id="25d9c4d7-07ad-4d61-8b98-9f247c5df997" />

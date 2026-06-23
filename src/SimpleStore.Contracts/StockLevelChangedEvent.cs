@@ -29,4 +29,6 @@ public static class StockChangeCause
     public const string DeliveryNote = "DeliveryNote";
     public const string ReceiptNote = "ReceiptNote";
     public const string ReservationCreated = "ReservationCreated";
+    // v12: a reservation was released (compensation), adding the held quantity back to OnHand.
+    public const string ReservationCancelled = "ReservationCancelled";
 }

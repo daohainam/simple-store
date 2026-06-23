@@ -202,6 +202,9 @@ public sealed class InventoryProjectionService : BackgroundService
                 case StockReservedV1 reserved:
                     await projector.ApplyStockReservedAsync(reserved, envelope.IsLive, ct);
                     break;
+                case StockReservationCancelledV1 cancelled:
+                    await projector.ApplyStockReservationCancelledAsync(cancelled, envelope.IsLive, ct);
+                    break;
                 default:
                     _log.LogWarning("Unhandled domain event {Type}.", envelope.DomainEvent.GetType().Name);
                     break;

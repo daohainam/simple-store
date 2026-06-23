@@ -2,7 +2,7 @@
 
 A **production-grade microservices reference architecture** built with **.NET 10**, **.NET Aspire**, **Entity Framework Core**, **PostgreSQL**, **Redis**, **RabbitMQ**, and **KurrentDB**. Designed as a progressive learning resource for developers studying microservices patterns, this e-commerce platform demonstrates how to evolve from a monolith into a fully distributed system with proper service boundaries, event-driven communication, saga orchestration, CQRS/Event Sourcing, resilience hardening, and full-stack observability.
 
-> **Who is this for?** Developers learning microservices architecture who want a real, runnable codebase that demonstrates industry patterns — not just theory. Each version (v1–v10) introduces a new concept you can study incrementally.
+> **Who is this for?** Developers learning microservices architecture who want a real, runnable codebase that demonstrates industry patterns — not just theory. Each version (v1–v12) introduces a new concept you can study incrementally.
 
 ---
 
@@ -48,14 +48,23 @@ A **production-grade microservices reference architecture** built with **.NET 10
                                                                  └─────────────┘
                                                                         │
        ┌────────────────────────────────────────────────────────────────┘
-       │
+       │   (Checkout consumes events only; Payment is also routed via the Gateway)
        ▼
 ┌──────────────────────────────────────────────────────────────┐
 │                    Checkout API (Saga Orchestrator)            │
-│           Coordinates order → stock → confirmation            │
+│     order → reserve stock → take payment → confirm,            │
+│       or compensate (release stock) → cancel                   │
 │                      via RabbitMQ + MassTransit                │
 ├──────────────────────────────────────────────────────────────┤
 │ checkoutdb (Postgres) — saga state + Quartz scheduled jobs    │
+└───────────────────────────────┬──────────────────────────────┘
+                                 │  ProcessPaymentRequested / PaymentSucceeded|Failed
+                                 ▼
+┌──────────────────────────────────────────────────────────────┐
+│                    Payment API  (v12)                          │
+│  Prepaid balance; charges the order — succeeds/fails on funds  │
+├──────────────────────────────────────────────────────────────┤
+│ paymentdb (Postgres) — accounts + transaction ledger          │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -70,6 +79,7 @@ A **production-grade microservices reference architecture** built with **.NET 10
 | **Backend-for-Frontend (BFF)** | Web & Admin apps | Session management, token caching, cookie-based auth for browsers |
 | **Event-Driven Architecture** | RabbitMQ + MassTransit | Loose coupling, async communication between services |
 | **Saga Orchestration** | `SimpleStore.Checkout.API` | Long-running workflows without distributed transactions |
+| **Compensating Transactions** | Checkout saga → Payment + Inventory (v12) | Undo a completed step (release reserved stock) when a later step (payment) fails |
 | **CQRS + Event Sourcing** | `SimpleStore.Inventory.API` | Separate read/write models, append-only event streams, projections |
 | **Transactional Outbox** | Order.API, Inventory.API | Reliable event publishing (atomicity between DB writes and messaging) |
 | **Inbox (Idempotency)** | Cart.API | Deduplicate message deliveries |
@@ -142,9 +152,21 @@ A **production-grade microservices reference architecture** built with **.NET 10
 |--------|---------|
 | **Owns** | `checkoutdb` (PostgreSQL) — saga state + Quartz jobs |
 | **HTTP Surface** | None — pure message consumer |
-| **Responsibilities** | Orchestrates order confirmation workflow across services |
+| **Responsibilities** | Orchestrates the order workflow across services: reserve stock → take payment → confirm, **or compensate** (release stock) and cancel |
+| **States** (v12) | `AwaitingStock` → `AwaitingPayment` → `Confirmed`, or `… → CompensatingStock → Cancelled` |
 | **Concurrency** | Pessimistic locking (`SELECT ... FOR UPDATE` on saga state) |
-| **Timeout** | 30-second reservation timeout (durable via Quartz persistent store) |
+| **Timeouts** | 30-second reservation timeout + 30-second payment timeout (both durable via Quartz persistent store) |
+
+### Payment API (`SimpleStore.Payment.API`) — Prepaid Wallet (v12)
+
+| Aspect | Details |
+|--------|---------|
+| **Owns** | `paymentdb` (PostgreSQL) — accounts + transaction ledger |
+| **Responsibilities** | Per-user prepaid balance (auto-provisioned at zero), deposits, and the saga-driven order charge — succeeds or fails on balance |
+| **Auth** | Authenticated users own their account; Admin endpoints to deposit on a customer's behalf |
+| **Publishes** | `PaymentSucceededEvent`, `PaymentFailedEvent` |
+| **Consumes** | `ProcessPaymentRequestedEvent` (from checkout saga); EF inbox → no double-charge |
+| **Pattern** | The **controllable gate**: the balance decides whether checkout confirms or cancels (+ stock release) — the demo's lever for exercising saga compensation |
 
 ### API Gateway (`SimpleStore.Gateway`)
 
@@ -166,49 +188,51 @@ This is the core distributed workflow that ties multiple services together witho
 Customer clicks "Place Order"
          │
          ▼
-┌─────────────────────────────┐
-│ Order.API creates Order     │
-│ (Status = Pending)          │
-│ Publishes OrderSubmittedEvent│
-│ via transactional outbox    │
-└────────────┬────────────────┘
-             │ RabbitMQ
-             ▼
-┌─────────────────────────────┐
-│ Checkout.API saga starts    │
-│ State → AwaitingStock       │
-│ Publishes                   │
-│ ReserveStockRequestedEvent  │
-└────────────┬────────────────┘
-             │ RabbitMQ
-             ▼
-┌─────────────────────────────┐
-│ Inventory.API checks stock  │
-│ (SELECT...FOR UPDATE)       │
-├─────────────┬───────────────┤
-│ Sufficient  │ Insufficient  │
-│     │       │       │       │
-│     ▼       │       ▼       │
-│ StockReserved│ StockReservation│
-│ Event       │ FailedEvent    │
-└─────┬───────┴───────┬───────┘
-      │ RabbitMQ       │
-      ▼                ▼
-┌──────────────┐ ┌──────────────┐
-│ Saga →       │ │ Saga →       │
-│ Confirmed    │ │ Cancelled    │
-│ Publishes    │ │ Publishes    │
-│ OrderConfirmed│ │ OrderCancelled│
-│ Event        │ │ Event        │
-└──────┬───────┘ └──────┬───────┘
-       │ RabbitMQ        │
-       ▼                 ▼
-┌─────────────────────────────┐
-│ Order.API updates status    │
-│ (Confirmed or Cancelled)    │
-└─────────────────────────────┘
+┌────────────────────────────────────────────┐
+│ Order.API creates Order (Status = Pending)  │
+│ Publishes OrderSubmittedEvent (txn outbox)  │
+└─────────────────────┬───────────────────────┘
+                      │ RabbitMQ
+                      ▼
+┌────────────────────────────────────────────┐
+│ Saga: AwaitingStock                          │
+│   → ReserveStockRequestedEvent               │
+└─────────────────────┬───────────────────────┘
+                      ▼
+┌────────────────────────────────────────────┐
+│ Inventory.API reserves stock (FOR UPDATE)    │
+└───────┬───────────────────────────┬──────────┘
+   StockReserved               StockReservationFailed
+        │                             │
+        ▼                             ▼
+┌───────────────────────────┐   ┌───────────────────────┐
+│ Saga: AwaitingPayment      │   │ Saga: Cancelled        │
+│   → ProcessPaymentRequested│   │   → OrderCancelledEvent │
+└───────────┬────────────────┘   └───────────────────────┘
+            ▼
+┌────────────────────────────────────────────┐
+│ Payment.API charges the account (balance)    │
+└───────┬───────────────────────────┬──────────┘
+  PaymentSucceeded            PaymentFailed / timeout
+        │                             │
+        ▼                             ▼
+┌───────────────────────────┐   ┌──────────────────────────────────────┐
+│ Saga: Confirmed            │   │ Saga: CompensatingStock                │
+│   → OrderConfirmedEvent    │   │   → StockReservationCancelRequested    │
+│                            │   │ Inventory releases stock (OnHand += qty)│
+│                            │   │   → StockReservationCancelled          │
+│                            │   │ Saga: Cancelled → OrderCancelledEvent  │
+└───────────┬────────────────┘   └──────────────────┬─────────────────────┘
+            │                                         │
+            └─────────────────┬───────────────────────┘
+                              ▼
+┌────────────────────────────────────────────┐
+│ Order.API updates status (Confirmed/Cancelled)│
+└────────────────────────────────────────────┘
 
-⏱️ If no response within 30s → Saga transitions to Cancelled (timeout)
+⏱️ Two durable 30s timeouts (stock, payment) bound the waits. A payment timeout
+   also releases the reserved stock (compensation) before cancelling. Both
+   survive Checkout.API restarts (Quartz persistent store).
 ```
 
 ---
@@ -223,6 +247,11 @@ All integration events are defined in `SimpleStore.Contracts` (a shared library 
 | `ReserveStockRequestedEvent` | Checkout.API | Inventory.API | Request stock reservation |
 | `StockReservedEvent` | Inventory.API | Checkout.API | Confirm reservation succeeded |
 | `StockReservationFailedEvent` | Inventory.API | Checkout.API | Report insufficient stock |
+| `ProcessPaymentRequestedEvent` (v12) | Checkout.API | Payment.API | Charge the order against the account balance |
+| `PaymentSucceededEvent` (v12) | Payment.API | Checkout.API | Payment charged → confirm order |
+| `PaymentFailedEvent` (v12) | Payment.API | Checkout.API | Insufficient balance → compensate + cancel |
+| `StockReservationCancelRequestedEvent` (v12) | Checkout.API | Inventory.API | **Compensation**: release the reserved stock |
+| `StockReservationCancelledEvent` (v12) | Inventory.API | Checkout.API | Stock released → finalize cancellation |
 | `OrderConfirmedEvent` | Checkout.API | Order.API | Finalize order as confirmed |
 | `OrderCancelledEvent` | Checkout.API | Order.API | Mark order as cancelled |
 | `ProductUpdatedEvent` | Catalog.API | Cart.API | Refresh cached product info in carts |
@@ -259,6 +288,9 @@ src/
 │
 ├── SimpleStore.Checkout.API         # Saga orchestrator (MassTransit state machine)
 │
+├── SimpleStore.Payment.API          # Payment microservice (owns paymentdb) — v12
+├── SimpleStore.Payment.API.Client   # DTOs + typed HttpClient for Payment
+│
 ├── SimpleStore.Web                  # Customer storefront (ASP.NET Core MVC + Razor Pages)
 └── SimpleStore.Admin                # Admin dashboard (Blazor Server)
 ```
@@ -273,6 +305,7 @@ src/
 | Cart.API | `cart-redis` | Redis | Shopping cart state (ephemeral) |
 | Inventory.API | `kurrentdb` + `inventorydb` | KurrentDB + PostgreSQL | Event store (write) + projected views (read) |
 | Checkout.API | `checkoutdb` | PostgreSQL | Saga state + Quartz scheduled jobs |
+| Payment.API | `paymentdb` | PostgreSQL | Prepaid accounts + transaction ledger |
 
 > **No cross-database foreign keys** — `Order.UserId` and `OrderItem.ProductId` are soft references. Cross-service data joins happen in application code (bulk fetch + dictionary lookup).
 
@@ -302,7 +335,7 @@ All services call `AddServiceDefaults()` which provides:
 
 ---
 
-## Learning Path: Incremental Migration (v1 → v8b)
+## Learning Path: Incremental Migration (v1 → v12)
 
 This project was built incrementally. Each version introduces a new microservices concept:
 
@@ -320,6 +353,8 @@ This project was built incrementally. Each version introduces a new microservice
 | **v8b** | Durable timeouts | Quartz persistent store so saga timeouts survive restarts |
 | **v9** | Resilience hardening | EF retry strategy, MassTransit retries + circuit breakers, KurrentDB reconnect, single-flight token refresh |
 | **v10** | Full-stack observability | EF/gRPC/Redis/MassTransit instrumentation, per-service metrics, saga activity tags, `/ready` endpoint, YARP active health probes |
+| **v11** | API & event versioning | `Asp.Versioning.Http` URL-segment versioning, per-version OpenAPI, pinned event `MessageUrn`s so contracts evolve without breaking the wire |
+| **v12** | Payment + saga compensation | Payment.API (prepaid balance), a payment step in the saga, and a real compensating transaction (release reserved stock) when payment fails |
 
 > 📖 See the [`docs/`](docs/) folder for detailed change notes for each version.
 
@@ -395,6 +430,7 @@ dotnet run --project src/SimpleStore.Order.API
 dotnet run --project src/SimpleStore.Cart.API
 dotnet run --project src/SimpleStore.Inventory.API
 dotnet run --project src/SimpleStore.Checkout.API
+dotnet run --project src/SimpleStore.Payment.API
 dotnet run --project src/SimpleStore.Gateway
 dotnet run --project src/SimpleStore.Web
 dotnet run --project src/SimpleStore.Admin
@@ -422,6 +458,10 @@ dotnet ef migrations add <Name> --project src/SimpleStore.Order.API `
 # Inventory (read side only)
 dotnet ef migrations add <Name> --project src/SimpleStore.Inventory.API `
   --startup-project src/SimpleStore.Inventory.API --context InventoryReadDbContext --output-dir Migrations
+
+# Payment
+dotnet ef migrations add <Name> --project src/SimpleStore.Payment.API `
+  --startup-project src/SimpleStore.Payment.API --context PaymentDbContext --output-dir Migrations
 ```
 
 > `Cart.API` uses Redis (no schema). `Inventory.API` write-side uses KurrentDB (append-only, no migrations). `Checkout.API` uses MassTransit + Quartz auto-migration.
@@ -452,10 +492,13 @@ dotnet build SimpleStore.slnx
 
 ## Further Reading
 
-- [`docs/checkout-saga.md`](docs/checkout-saga.md) — Detailed checkout saga design
+- [`docs/checkout-saga.md`](docs/checkout-saga.md) — Detailed checkout saga design (incl. the v12 payment step + compensation in §15)
+- [`docs/payment-service.md`](docs/payment-service.md) — Payment service design (accounts, deposits, the saga charge, idempotency)
 - [`docs/v1-changes.md`](docs/v1-changes.md) through [`docs/v8b-durable-store-for-saga-timeouts.md`](docs/v8b-durable-store-for-saga-timeouts.md) — Version-by-version migration notes (v1–v8b)
 - [`docs/v9-changes.md`](docs/v9-changes.md) — v9 resilience hardening (EF retries, circuit breakers, single-flight token refresh)
 - [`docs/v10-changes.md`](docs/v10-changes.md) — v10 observability pass (OTel instrumentation, custom metrics, saga tracing, health-check separation, YARP active probes)
+- [`docs/v11-changes.md`](docs/v11-changes.md) — v11 API & event versioning pass
+- [`docs/v12-changes.md`](docs/v12-changes.md) — v12 payment service + saga compensation
 - [.NET Aspire Documentation](https://learn.microsoft.com/dotnet/aspire/)
 - [MassTransit Saga Documentation](https://masstransit.io/documentation/patterns/saga)
 - [CQRS & Event Sourcing (Martin Fowler)](https://martinfowler.com/bliki/CQRS.html)

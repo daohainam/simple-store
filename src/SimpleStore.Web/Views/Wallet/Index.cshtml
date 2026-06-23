@@ -1,0 +1,89 @@
+@model SimpleStore.Web.ViewModels.WalletViewModel
+@{
+    ViewData["Title"] = "Wallet";
+}
+<div class="container py-4">
+    <h1 class="mb-4"><i class="bi bi-wallet2 me-2"></i>My Wallet</h1>
+
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show">
+            <i class="bi bi-exclamation-triangle me-2"></i>@TempData["Error"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <div class="row g-4">
+        <div class="col-md-5">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h6 class="text-muted text-uppercase small mb-1">Current balance</h6>
+                    <div class="display-5 fw-bold mb-3">$@Model.Account.Balance.ToString("N2")</div>
+
+                    <form asp-action="Deposit" method="post">
+                        <label class="form-label">Top up your balance</label>
+                        <div class="input-group mb-2">
+                            <span class="input-group-text">$</span>
+                            <input type="number" name="amount" step="0.01" min="0.01" value="100.00"
+                                   class="form-control" required />
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-plus-circle me-1"></i>Deposit
+                            </button>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="submit" name="amount" value="50" class="btn btn-sm btn-outline-secondary">+$50</button>
+                            <button type="submit" name="amount" value="100" class="btn btn-sm btn-outline-secondary">+$100</button>
+                            <button type="submit" name="amount" value="500" class="btn btn-sm btn-outline-secondary">+$500</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            <p class="text-muted small mt-2">
+                <i class="bi bi-info-circle me-1"></i>Checkout charges this balance. If it's too low, the
+                order is cancelled and the reserved stock is released.
+            </p>
+        </div>
+
+        <div class="col-md-7">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white"><strong>Transaction history</strong></div>
+                <div class="card-body p-0">
+                    @if (!Model.Transactions.Any())
+                    {
+                        <p class="text-muted text-center py-4 mb-0">No transactions yet.</p>
+                    }
+                    else
+                    {
+                        <table class="table mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Type</th>
+                                    <th>Description</th>
+                                    <th class="text-end">Amount</th>
+                                    <th class="text-end">Balance</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var t in Model.Transactions)
+                                {
+                                    <tr class="align-middle">
+                                        <td>@t.CreatedAt.ToString("MMM dd, HH:mm")</td>
+                                        <td>
+                                            <span class="badge @(t.Type == "Deposit" ? "bg-success" : "bg-secondary")">@t.Type</span>
+                                        </td>
+                                        <td>@t.Description</td>
+                                        <td class="text-end @(t.Type == "Deposit" ? "text-success" : "text-danger")">
+                                            @(t.Type == "Deposit" ? "+" : "-")$@t.Amount.ToString("N2")
+                                        </td>
+                                        <td class="text-end">$@t.BalanceAfter.ToString("N2")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
