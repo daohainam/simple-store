@@ -9,19 +9,19 @@
 
   <ItemGroup>
     <PackageReference Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.5.3" />
-    <PackageReference Include="MassTransit.EntityFrameworkCore" Version="9.1.2" />
-    <PackageReference Include="MassTransit.Quartz" Version="9.1.2" />
-    <PackageReference Include="MassTransit.RabbitMQ" Version="9.1.2" />
-    <PackageReference Include="Quartz.Extensions.Hosting" Version="3.18.1" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9">
+    <PackageReference Include="MassTransit.EntityFrameworkCore" Version="9.2.1" />
+    <PackageReference Include="MassTransit.Quartz" Version="9.2.1" />
+    <PackageReference Include="MassTransit.RabbitMQ" Version="9.2.1" />
+    <PackageReference Include="Quartz.Extensions.Hosting" Version="4.1.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.9">
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.12">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="Quartz.Serialization.SystemTextJson" Version="3.18.1" />
+    <PackageReference Include="Quartz.Serialization.SystemTextJson" Version="4.1.0" />
   </ItemGroup>
 
   <ItemGroup>
