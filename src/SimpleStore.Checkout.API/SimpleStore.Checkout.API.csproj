@@ -12,7 +12,7 @@
     <PackageReference Include="MassTransit.EntityFrameworkCore" Version="9.2.1" />
     <PackageReference Include="MassTransit.Quartz" Version="9.2.1" />
     <PackageReference Include="MassTransit.RabbitMQ" Version="9.2.1" />
-    <PackageReference Include="Quartz.Extensions.Hosting" Version="4.1.0" />
+    <PackageReference Include="Quartz.Extensions.Hosting" Version="3.22.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -21,7 +21,7 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="Quartz.Serialization.SystemTextJson" Version="4.1.0" />
+    <PackageReference Include="Quartz.Serialization.SystemTextJson" Version="3.22.0" />
   </ItemGroup>
 
   <ItemGroup>

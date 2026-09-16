@@ -5,14 +5,14 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
-using SimpleStore.Payment.API.Data;
+using SimpleStore.Catalog.API.Data;
 
 #nullable disable
 
-namespace SimpleStore.Payment.API.Migrations
+namespace SimpleStore.Catalog.API.Migrations
 {
-    [DbContext(typeof(PaymentDbContext))]
-    [Migration("20260623123207_InitialCreate")]
+    [DbContext(typeof(CatalogDbContext))]
+    [Migration("20260915132535_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -20,7 +20,7 @@ namespace SimpleStore.Payment.API.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.9")
+                .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -150,10 +150,6 @@ namespace SimpleStore.Payment.API.Migrations
 
                     b.HasKey("SequenceNumber");
 
-                    b.HasIndex("EnqueueTime");
-
-                    b.HasIndex("ExpirationTime");
-
                     b.HasIndex("OutboxId", "SequenceNumber")
                         .IsUnique();
 
@@ -192,84 +188,73 @@ namespace SimpleStore.Payment.API.Migrations
 
                     b.HasKey("OutboxId");
 
-                    b.HasIndex("Created");
-
                     b.HasIndex("BusName", "Created");
 
                     b.ToTable("OutboxState");
                 });
 
-            modelBuilder.Entity("SimpleStore.Payment.API.Models.PaymentAccount", b =>
+            modelBuilder.Entity("SimpleStore.Catalog.API.Models.Category", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Balance")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasMaxLength(450)
-                        .HasColumnType("character varying(450)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId")
-                        .IsUnique();
-
-                    b.ToTable("payment_accounts", (string)null);
-                });
-
-            modelBuilder.Entity("SimpleStore.Payment.API.Models.PaymentTransaction", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("AccountId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Amount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<decimal>("BalanceAfter")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<Guid?>("CorrelationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<int?>("OrderId")
                         .HasColumnType("integer");
 
-                    b.Property<string>("Type")
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Description")
                         .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AccountId");
+                    b.ToTable("Categories");
+                });
 
-                    b.HasIndex("OrderId");
+            modelBuilder.Entity("SimpleStore.Catalog.API.Models.Product", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
 
-                    b.ToTable("payment_transactions", (string)null);
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CategoryId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("ImageUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<decimal>("Price")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("Stock")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CategoryId")
+                        .HasDatabaseName("ix_products_category_id");
+
+                    b.ToTable("Products");
                 });
 
             modelBuilder.Entity("MassTransit.EntityFrameworkCoreIntegration.OutboxMessage", b =>
@@ -284,20 +269,20 @@ namespace SimpleStore.Payment.API.Migrations
                         .HasPrincipalKey("MessageId", "ConsumerId");
                 });
 
-            modelBuilder.Entity("SimpleStore.Payment.API.Models.PaymentTransaction", b =>
+            modelBuilder.Entity("SimpleStore.Catalog.API.Models.Product", b =>
                 {
-                    b.HasOne("SimpleStore.Payment.API.Models.PaymentAccount", "Account")
-                        .WithMany("Transactions")
-                        .HasForeignKey("AccountId")
+                    b.HasOne("SimpleStore.Catalog.API.Models.Category", "Category")
+                        .WithMany("Products")
+                        .HasForeignKey("CategoryId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Account");
+                    b.Navigation("Category");
                 });
 
-            modelBuilder.Entity("SimpleStore.Payment.API.Models.PaymentAccount", b =>
+            modelBuilder.Entity("SimpleStore.Catalog.API.Models.Category", b =>
                 {
-                    b.Navigation("Transactions");
+                    b.Navigation("Products");
                 });
 #pragma warning restore 612, 618
         }

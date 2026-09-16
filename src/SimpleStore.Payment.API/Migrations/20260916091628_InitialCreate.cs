@@ -140,16 +140,6 @@ namespace SimpleStore.Payment.API.Migrations
                 column: "Delivered");
 
             migrationBuilder.CreateIndex(
-                name: "IX_OutboxMessage_EnqueueTime",
-                table: "OutboxMessage",
-                column: "EnqueueTime");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_OutboxMessage_ExpirationTime",
-                table: "OutboxMessage",
-                column: "ExpirationTime");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_OutboxMessage_InboxMessageId_InboxConsumerId_SequenceNumber",
                 table: "OutboxMessage",
                 columns: new[] { "InboxMessageId", "InboxConsumerId", "SequenceNumber" },
@@ -165,11 +155,6 @@ namespace SimpleStore.Payment.API.Migrations
                 name: "IX_OutboxState_BusName_Created",
                 table: "OutboxState",
                 columns: new[] { "BusName", "Created" });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_OutboxState_Created",
-                table: "OutboxState",
-                column: "Created");
 
             migrationBuilder.CreateIndex(
                 name: "IX_payment_accounts_UserId",

@@ -17,7 +17,7 @@ namespace SimpleStore.Order.API.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.9")
+                .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -147,10 +147,6 @@ namespace SimpleStore.Order.API.Migrations
 
                     b.HasKey("SequenceNumber");
 
-                    b.HasIndex("EnqueueTime");
-
-                    b.HasIndex("ExpirationTime");
-
                     b.HasIndex("OutboxId", "SequenceNumber")
                         .IsUnique();
 
@@ -188,8 +184,6 @@ namespace SimpleStore.Order.API.Migrations
                         .HasColumnType("bytea");
 
                     b.HasKey("OutboxId");
-
-                    b.HasIndex("Created");
 
                     b.HasIndex("BusName", "Created");
 

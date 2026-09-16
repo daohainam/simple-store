@@ -12,15 +12,15 @@ using SimpleStore.Inventory.API.Data;
 namespace SimpleStore.Inventory.API.Migrations
 {
     [DbContext(typeof(InventoryReadDbContext))]
-    [Migration("20260527054259_AddReservationReadModelAndMassTransitOutbox")]
-    partial class AddReservationReadModelAndMassTransitOutbox
+    [Migration("20260916091659_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.8")
+                .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -150,10 +150,6 @@ namespace SimpleStore.Inventory.API.Migrations
 
                     b.HasKey("SequenceNumber");
 
-                    b.HasIndex("EnqueueTime");
-
-                    b.HasIndex("ExpirationTime");
-
                     b.HasIndex("OutboxId", "SequenceNumber")
                         .IsUnique();
 
@@ -168,6 +164,10 @@ namespace SimpleStore.Inventory.API.Migrations
                     b.Property<Guid>("OutboxId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<string>("BusName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
 
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
@@ -188,7 +188,7 @@ namespace SimpleStore.Inventory.API.Migrations
 
                     b.HasKey("OutboxId");
 
-                    b.HasIndex("Created");
+                    b.HasIndex("BusName", "Created");
 
                     b.ToTable("OutboxState");
                 });
@@ -396,6 +396,9 @@ namespace SimpleStore.Inventory.API.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ProductId", "MovementType")
+                        .HasDatabaseName("ix_stock_movements_product_type");
 
                     b.HasIndex("ProductId", "OccurredAt")
                         .IsDescending(false, true)

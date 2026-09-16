@@ -24,6 +24,9 @@ builder.Services.AddRazorPages();
 // v9: TokenRefreshCoordinator coalesces concurrent refresh-token rotations.
 builder.Services.AddSingleton<TokenRefreshCoordinator>();
 builder.Services.AddTransient<BearerTokenHandler>();
+// Refresh-token rotation goes through its own handler-free client — see TokenRefreshClient.
+builder.Services.AddHttpClient<TokenRefreshClient>(client =>
+    client.BaseAddress = new Uri("https+http://gateway"));
 builder.AddCatalogApiClient().AddHttpMessageHandler<BearerTokenHandler>();
 builder.AddIdentityApiClient().AddHttpMessageHandler<BearerTokenHandler>();
 builder.AddOrderApiClient().AddHttpMessageHandler<BearerTokenHandler>();
@@ -65,7 +68,7 @@ builder.Services
 
                 if (current.ExpiresAt <= DateTime.UtcNow.AddSeconds(30) && !string.IsNullOrEmpty(current.RefreshToken))
                 {
-                    var identity = ctx.HttpContext.RequestServices.GetRequiredService<IIdentityApiClient>();
+                    var identity = ctx.HttpContext.RequestServices.GetRequiredService<TokenRefreshClient>();
                     try
                     {
                         var rotated = await identity.RefreshAsync(new RefreshRequest { RefreshToken = current.RefreshToken }, ctx.HttpContext.RequestAborted);

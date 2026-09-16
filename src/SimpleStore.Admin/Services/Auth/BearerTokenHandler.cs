@@ -7,18 +7,18 @@ namespace SimpleStore.Admin.Services.Auth;
 public class BearerTokenHandler : DelegatingHandler
 {
     private readonly ITokenStore _tokens;
-    private readonly IIdentityApiClient _identity;
+    private readonly TokenRefreshClient _refreshClient;
     private readonly TokenRefreshCoordinator _coordinator;
     private readonly ILogger<BearerTokenHandler> _logger;
 
     public BearerTokenHandler(
         ITokenStore tokens,
-        IIdentityApiClient identity,
+        TokenRefreshClient refreshClient,
         TokenRefreshCoordinator coordinator,
         ILogger<BearerTokenHandler> logger)
     {
         _tokens = tokens;
-        _identity = identity;
+        _refreshClient = refreshClient;
         _coordinator = coordinator;
         _logger = logger;
     }
@@ -45,7 +45,7 @@ public class BearerTokenHandler : DelegatingHandler
         {
             var rotated = await _coordinator.RefreshAsync(
                 current.RefreshToken,
-                () => _identity.RefreshAsync(new RefreshRequest { RefreshToken = current.RefreshToken }, CancellationToken.None));
+                () => _refreshClient.RefreshAsync(new RefreshRequest { RefreshToken = current.RefreshToken }, CancellationToken.None));
             if (rotated is null) return null;
 
             var latest = await _tokens.GetAsync(cancellationToken);

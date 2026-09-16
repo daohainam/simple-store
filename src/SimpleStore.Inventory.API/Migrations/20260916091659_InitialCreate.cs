@@ -7,11 +7,27 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace SimpleStore.Inventory.API.Migrations
 {
     /// <inheritdoc />
-    public partial class AddReservationReadModelAndMassTransitOutbox : Migration
+    public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.CreateTable(
+                name: "delivery_notes",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Date = table.Column<DateTime>(type: "date", nullable: false),
+                    Reference = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    IssuedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    LineCount = table.Column<int>(type: "integer", nullable: false),
+                    TotalQuantity = table.Column<int>(type: "integer", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_delivery_notes", x => x.Id);
+                });
+
             migrationBuilder.CreateTable(
                 name: "InboxState",
                 columns: table => new
@@ -44,11 +60,42 @@ namespace SimpleStore.Inventory.API.Migrations
                     RowVersion = table.Column<byte[]>(type: "bytea", rowVersion: true, nullable: true),
                     Created = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     Delivered = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    LastSequenceNumber = table.Column<long>(type: "bigint", nullable: true)
+                    LastSequenceNumber = table.Column<long>(type: "bigint", nullable: true),
+                    BusName = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_OutboxState", x => x.OutboxId);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "projection_checkpoints",
+                columns: table => new
+                {
+                    ProjectionName = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    CommitPosition = table.Column<long>(type: "bigint", nullable: false),
+                    PreparePosition = table.Column<long>(type: "bigint", nullable: false),
+                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_projection_checkpoints", x => x.ProjectionName);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "receipt_notes",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Date = table.Column<DateTime>(type: "date", nullable: false),
+                    Reference = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    RecordedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    LineCount = table.Column<int>(type: "integer", nullable: false),
+                    TotalQuantity = table.Column<int>(type: "integer", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_receipt_notes", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -65,6 +112,56 @@ namespace SimpleStore.Inventory.API.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_reservations", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "stock_levels",
+                columns: table => new
+                {
+                    ProductId = table.Column<int>(type: "integer", nullable: false),
+                    OnHand = table.Column<int>(type: "integer", nullable: false),
+                    LastMovementAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_stock_levels", x => x.ProductId);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "stock_movements",
+                columns: table => new
+                {
+                    Id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    ProductId = table.Column<int>(type: "integer", nullable: false),
+                    Delta = table.Column<int>(type: "integer", nullable: false),
+                    MovementType = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
+                    SourceNoteId = table.Column<Guid>(type: "uuid", nullable: false),
+                    OccurredAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_stock_movements", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "delivery_note_lines",
+                columns: table => new
+                {
+                    DeliveryNoteId = table.Column<Guid>(type: "uuid", nullable: false),
+                    LineNumber = table.Column<int>(type: "integer", nullable: false),
+                    ProductId = table.Column<int>(type: "integer", nullable: false),
+                    Quantity = table.Column<int>(type: "integer", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_delivery_note_lines", x => new { x.DeliveryNoteId, x.LineNumber });
+                    table.ForeignKey(
+                        name: "FK_delivery_note_lines_delivery_notes_DeliveryNoteId",
+                        column: x => x.DeliveryNoteId,
+                        principalTable: "delivery_notes",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -110,6 +207,26 @@ namespace SimpleStore.Inventory.API.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "receipt_note_lines",
+                columns: table => new
+                {
+                    ReceiptNoteId = table.Column<Guid>(type: "uuid", nullable: false),
+                    LineNumber = table.Column<int>(type: "integer", nullable: false),
+                    ProductId = table.Column<int>(type: "integer", nullable: false),
+                    Quantity = table.Column<int>(type: "integer", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_receipt_note_lines", x => new { x.ReceiptNoteId, x.LineNumber });
+                    table.ForeignKey(
+                        name: "FK_receipt_note_lines_receipt_notes_ReceiptNoteId",
+                        column: x => x.ReceiptNoteId,
+                        principalTable: "receipt_notes",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "reservation_lines",
                 columns: table => new
                 {
@@ -135,16 +252,6 @@ namespace SimpleStore.Inventory.API.Migrations
                 column: "Delivered");
 
             migrationBuilder.CreateIndex(
-                name: "IX_OutboxMessage_EnqueueTime",
-                table: "OutboxMessage",
-                column: "EnqueueTime");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_OutboxMessage_ExpirationTime",
-                table: "OutboxMessage",
-                column: "ExpirationTime");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_OutboxMessage_InboxMessageId_InboxConsumerId_SequenceNumber",
                 table: "OutboxMessage",
                 columns: new[] { "InboxMessageId", "InboxConsumerId", "SequenceNumber" },
@@ -157,30 +264,62 @@ namespace SimpleStore.Inventory.API.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_OutboxState_Created",
+                name: "IX_OutboxState_BusName_Created",
                 table: "OutboxState",
-                column: "Created");
+                columns: new[] { "BusName", "Created" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_reservations_OrderId",
                 table: "reservations",
                 column: "OrderId");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_stock_movements_product_occurred",
+                table: "stock_movements",
+                columns: new[] { "ProductId", "OccurredAt" },
+                descending: new[] { false, true });
+
+            migrationBuilder.CreateIndex(
+                name: "ix_stock_movements_product_type",
+                table: "stock_movements",
+                columns: new[] { "ProductId", "MovementType" });
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
+                name: "delivery_note_lines");
+
+            migrationBuilder.DropTable(
                 name: "OutboxMessage");
 
             migrationBuilder.DropTable(
+                name: "projection_checkpoints");
+
+            migrationBuilder.DropTable(
+                name: "receipt_note_lines");
+
+            migrationBuilder.DropTable(
                 name: "reservation_lines");
+
+            migrationBuilder.DropTable(
+                name: "stock_levels");
+
+            migrationBuilder.DropTable(
+                name: "stock_movements");
+
+            migrationBuilder.DropTable(
+                name: "delivery_notes");
 
             migrationBuilder.DropTable(
                 name: "InboxState");
 
             migrationBuilder.DropTable(
                 name: "OutboxState");
+
+            migrationBuilder.DropTable(
+                name: "receipt_notes");
 
             migrationBuilder.DropTable(
                 name: "reservations");
