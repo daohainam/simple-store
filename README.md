@@ -81,8 +81,8 @@ A **production-grade microservices reference architecture** built with **.NET 10
 | **Saga Orchestration** | `SimpleStore.Checkout.API` | Long-running workflows without distributed transactions |
 | **Compensating Transactions** | Checkout saga → Payment + Inventory (v12) | Undo a completed step (release reserved stock) when a later step (payment) fails |
 | **CQRS + Event Sourcing** | `SimpleStore.Inventory.API` | Separate read/write models, append-only event streams, projections |
-| **Transactional Outbox** | Order.API, Inventory.API | Reliable event publishing (atomicity between DB writes and messaging) |
-| **Inbox (Idempotency)** | Cart.API | Deduplicate message deliveries |
+| **Transactional Outbox** | Order, Catalog, Inventory, Checkout and Payment APIs | Reliable event publishing (atomicity between DB writes and messaging) |
+| **Inbox (Idempotency)** | Catalog, Order, Payment, Checkout, Inventory (EF inbox); Cart.API relies on idempotent handlers instead | Deduplicate message deliveries |
 | **Service Discovery** | Aspire runtime | Dynamic routing via logical service names (no hardcoded ports) |
 | **Distributed Tracing** | OpenTelemetry across all services | End-to-end observability: EF Core SQL spans, gRPC spans, Redis command traces, MassTransit publish/consume spans, saga-transition activity tags |
 | **Custom Metrics** | Per-service `Telemetry` classes | Business counters (orders, reservations), histograms (fan-out duration), observable gauges (projector lag) |
@@ -93,6 +93,62 @@ A **production-grade microservices reference architecture** built with **.NET 10
 
 ---
 
+## Learning Guide
+
+New to microservices? The [`docs/guide/`](docs/guide/README.md) folder is a step-by-step, code-level tour of this repository. Each chapter explains **why** a piece exists, walks through the real code, shows the algorithm in plain steps, draws the flow with diagrams, and ends with a hands-on exercise against the running app.
+
+**Start here:** read [Chapter 1](docs/guide/01-architecture-and-aspire.md), then [Chapter 5](docs/guide/05-orders-and-outbox.md) and [Chapter 6](docs/guide/06-checkout-saga.md) — together they contain the core idea of the project. Then continue in order.
+
+| # | Chapter | What you will learn |
+|---|---------|---------------------|
+| 1 | [Architecture and Aspire](docs/guide/01-architecture-and-aspire.md) | Services, data ownership, how Aspire wires resources and secrets |
+| 2 | [Gateway and API versioning](docs/guide/02-gateway-and-api-versioning.md) | YARP routing, edge authorization, health probes, `/api/v1/...` |
+| 3 | [Authentication and the BFF pattern](docs/guide/03-authentication-and-bff.md) | JWT, refresh-token rotation, passkeys, server-side sessions, single-flight refresh |
+| 4 | [Catalog and Cart](docs/guide/04-catalog-and-cart.md) | CRUD service, Redis cart, anonymous-to-user merge, event-driven cache refresh |
+| 5 | [Orders and the transactional outbox](docs/guide/05-orders-and-outbox.md) | The dual-write problem, outbox and inbox, order lifecycle |
+| 6 | [The checkout saga](docs/guide/06-checkout-saga.md) | State machine, timeouts, compensation, transition table |
+| 7 | [Inventory: event sourcing and CQRS](docs/guide/07-inventory-event-sourcing-cqrs.md) | Aggregates, event store, projector, read models, replay |
+| 8 | [Payment and compensation](docs/guide/08-payment-and-compensation.md) | Prepaid wallet as a controllable gate; success vs. rollback demo |
+| 9 | [Resilience and observability](docs/guide/09-resilience-and-observability.md) | Retries, circuit breakers, health checks, traces, metrics |
+| 10 | [Contracts and versioning](docs/guide/10-contracts-and-versioning.md) | Every integration event, and how to evolve one safely |
+| 11 | [Known limitations](docs/guide/11-known-limitations.md) | What the teaching project simplifies, and what production needs |
+
+### The whole flow at a glance
+
+A customer places an order. Solid lines are HTTP calls, dashed lines are messages on RabbitMQ.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor C as Customer
+    participant W as Web (BFF)
+    participant G as Gateway
+    participant O as Order API
+    participant S as Checkout saga
+    participant I as Inventory API
+    participant P as Payment API
+
+    C->>W: Place order
+    W->>G: POST /api/v1/order/orders
+    G->>O: forward with JWT
+    O->>O: save order and outbox row in one transaction
+    O-->>S: OrderSubmitted
+    S-->>I: ReserveStockRequested
+    I-->>S: StockReserved or StockReservationFailed
+    S-->>P: ProcessPaymentRequested
+    alt balance is enough
+        P-->>S: PaymentSucceeded
+        S-->>O: OrderConfirmed
+    else balance is too low
+        P-->>S: PaymentFailed
+        S-->>I: StockReservationCancelRequested
+        I-->>S: StockReservationCancelled
+        S-->>O: OrderCancelled
+    end
+```
+
+---
+
 ## Microservices in Detail
 
 ### Identity API (`SimpleStore.Identity.API`)
@@ -100,7 +156,7 @@ A **production-grade microservices reference architecture** built with **.NET 10
 | Aspect | Details |
 |--------|---------|
 | **Owns** | `identitydb` (PostgreSQL) |
-| **Responsibilities** | User registration, login, JWT issuance (HS256, 15min), refresh token rotation, passkey/WebAuthn support, admin user management |
+| **Responsibilities** | User registration, login, JWT issuance (HS256, 60 min by default), refresh token rotation, passkey/WebAuthn support, admin user management |
 | **Auth Pattern** | Token provider — all other services validate JWTs issued here |
 | **Demo Accounts** | `admin@simplestore.local` / `Admin123!` (Admin), `demo@simplestore.local` / `Demo123!` (Customer) |
 
@@ -317,7 +373,7 @@ src/
 Events are written to the same database transaction as business data, then delivered to RabbitMQ asynchronously. This guarantees **at-least-once delivery** without two-phase commits.
 
 ### Inbox (Idempotency)
-Consumer services (e.g., Cart.API) use MassTransit's inbox pattern to deduplicate messages, ensuring exactly-once processing semantics.
+Services with a DbContext (e.g., Order, Catalog, Payment) use MassTransit's EF inbox to deduplicate messages, giving exactly-once *processing* on top of at-least-once delivery. Cart.API has no database, so its consumer is written to be idempotent instead.
 
 ### Durable Saga State
 The checkout saga state is persisted in PostgreSQL with pessimistic locking (`SELECT ... FOR UPDATE`), preventing race conditions in concurrent event processing.
@@ -492,6 +548,7 @@ dotnet build SimpleStore.slnx
 
 ## Further Reading
 
+- [`docs/guide/`](docs/guide/README.md) — The step-by-step **learning guide** (11 chapters with diagrams, code walkthroughs and exercises)
 - [`docs/checkout-saga.md`](docs/checkout-saga.md) — Detailed checkout saga design (incl. the v12 payment step + compensation in §15)
 - [`docs/payment-service.md`](docs/payment-service.md) — Payment service design (accounts, deposits, the saga charge, idempotency)
 - [`docs/v1-changes.md`](docs/v1-changes.md) through [`docs/v8b-durable-store-for-saga-timeouts.md`](docs/v8b-durable-store-for-saga-timeouts.md) — Version-by-version migration notes (v1–v8b)
