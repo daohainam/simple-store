@@ -95,6 +95,8 @@ A **production-grade microservices reference architecture** built with **.NET 10
 
 ## Learning Guide
 
+> 🇻🇳 **Tiếng Việt:** bản dịch đầy đủ của toàn bộ hướng dẫn nằm ở [`docs/guide/vi/`](docs/guide/vi/README.md).
+
 New to microservices? The [`docs/guide/`](docs/guide/README.md) folder is a step-by-step, code-level tour of this repository. Each chapter explains **why** a piece exists, walks through the real code, shows the algorithm in plain steps, draws the flow with diagrams, and ends with a hands-on exercise against the running app.
 
 **Start here:** read [Chapter 1](docs/guide/01-architecture-and-aspire.md), then [Chapter 5](docs/guide/05-orders-and-outbox.md) and [Chapter 6](docs/guide/06-checkout-saga.md) — together they contain the core idea of the project. Then continue in order.
@@ -548,7 +550,7 @@ dotnet build SimpleStore.slnx
 
 ## Further Reading
 
-- [`docs/guide/`](docs/guide/README.md) — The step-by-step **learning guide** (11 chapters with diagrams, code walkthroughs and exercises)
+- [`docs/guide/`](docs/guide/README.md) — The step-by-step **learning guide** (11 chapters with diagrams, code walkthroughs and exercises); Vietnamese translation in [`docs/guide/vi/`](docs/guide/vi/README.md)
 - [`docs/checkout-saga.md`](docs/checkout-saga.md) — Detailed checkout saga design (incl. the v12 payment step + compensation in §15)
 - [`docs/payment-service.md`](docs/payment-service.md) — Payment service design (accounts, deposits, the saga charge, idempotency)
 - [`docs/v1-changes.md`](docs/v1-changes.md) through [`docs/v8b-durable-store-for-saga-timeouts.md`](docs/v8b-durable-store-for-saga-timeouts.md) — Version-by-version migration notes (v1–v8b)

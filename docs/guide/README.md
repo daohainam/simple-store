@@ -1,5 +1,7 @@
 # SimpleStore Learning Guide
 
+> 🇻🇳 Bản tiếng Việt: [docs/guide/vi/README.md](vi/README.md)
+
 A step-by-step, code-level tour of SimpleStore for people who are **new to microservices**. The root [README](../../README.md) tells you *what* the system contains; this guide explains *how it works and why*, using the real code, diagrams and small algorithms.
 
 Every chapter has the same shape, so you always know where to look:
