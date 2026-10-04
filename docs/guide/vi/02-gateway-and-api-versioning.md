@@ -1,7 +1,7 @@
 # Chương 2 - Gateway và versioning cho API
 > 🇻🇳 Bản tiếng Việt. English version: [02-gateway-and-api-versioning.md](../02-gateway-and-api-versioning.md)
 
-Gateway là "cửa trước" duy nhất của mọi backend HTTP. Nó kiểm tra token đăng nhập của người gọi, quyết định backend nào sẽ nhận từng request, và ngừng gửi lưu lượng tới backend đang không khỏe. Chương này đọc mã nguồn và bảng route của gateway, sau đó cho bạn thấy cách mỗi backend đặt số phiên bản (version) vào URL để API có thể thay đổi sau này mà không làm hỏng các client hiện có.
+Gateway là "cửa trước" duy nhất của mọi backend HTTP. Nó kiểm tra token đăng nhập của người gọi, quyết định backend nào sẽ nhận từng request, và ngừng gửi lưu lượng tới backend không sẵn sàng. Chương này xem mã nguồn và bảng route của gateway, sau đó giải thích cách mỗi backend đưa số phiên bản (version) vào URL để API có thể thay đổi mà không làm hỏng các client hiện có.
 
 **Bạn sẽ học được**
 
@@ -16,7 +16,7 @@ Gateway là "cửa trước" duy nhất của mọi backend HTTP. Nó kiểm tra
 
 ## Vấn đề cần giải quyết
 
-Nếu không có gateway, các chương trình Web và Admin sẽ phải biết sáu địa chỉ backend, và mỗi backend phải truy cập được từ bên ngoài. Mỗi backend cũng phải tự bảo vệ mình trước lưu lượng ẩn danh.
+Nếu không có gateway, Web và Admin sẽ phải biết địa chỉ của cả sáu backend, đồng thời phải mở từng backend để bên ngoài truy cập. Mỗi backend cũng phải tự bảo vệ mình trước lưu lượng ẩn danh.
 
 Gateway giải quyết việc này bằng cách trở thành điểm vào công khai duy nhất:
 
@@ -192,7 +192,7 @@ Mỗi backend có một cluster với một destination. Cluster identity là v�
 
 - Cứ mỗi 10 giây, gateway gửi `GET /health` tới backend và chờ tối đa 3 giây.
 - `ConsecutiveFailures` là một policy của YARP: một destination bị đánh dấu là không khỏe (unhealthy) sau N lần thăm dò thất bại liên tiếp. N được đọc từ metadata của cluster.
-- Cluster identity đặt `Threshold` là `1`, nên chỉ một lần thăm dò thất bại là đủ. Năm cluster còn lại để trống và dùng mặc định của YARP, vốn chịu được nhiều lần thất bại hơn. Identity nghiêm ngặt hơn vì mọi request của người dùng đã đăng nhập đều phụ thuộc vào nó.
+- Cluster identity đặt `Threshold` là `1`, nên chỉ một lần thăm dò thất bại là đủ. Năm cluster còn lại không đặt ngưỡng riêng mà dùng mặc định của YARP, vốn chịu được nhiều lần thất bại hơn. Identity nghiêm ngặt hơn vì mọi request của người dùng đã đăng nhập đều phụ thuộc vào nó.
 - `/health` là endpoint được thêm bởi `MapDefaultEndpoints()` trong mọi service (chương 9 giải thích về nó).
 
 ### Bước 7 - URL có phiên bản trong các backend
@@ -298,7 +298,7 @@ Khởi động hệ thống bằng `dotnet run --project src/SimpleStore.AppHost
 $gw = "https://localhost:<gateway-port>"
 ```
 
-Các tài khoản demo được seed sẵn được định nghĩa trong [IdentitySeeder.cs](../../../src/SimpleStore.Identity.API/IdentitySeeder.cs); hãy dùng các giá trị đó cho `<email>` và `<password>` bên dưới (`-k` chấp nhận chứng chỉ phát triển cục bộ).
+Các tài khoản demo được khai báo trong [IdentitySeeder.cs](../../../src/SimpleStore.Identity.API/IdentitySeeder.cs); hãy dùng thông tin đăng nhập đó cho `<email>` và `<password>` bên dưới (`-k` chấp nhận chứng chỉ phát triển cục bộ).
 
 1. **Đọc ẩn danh hoạt động.**
    `curl.exe -ski "$gw/api/v1/catalog/products?pageSize=2"` trả về 200. Hãy tìm header response `api-supported-versions: 1.0`.

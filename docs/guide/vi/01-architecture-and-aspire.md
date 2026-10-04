@@ -30,7 +30,7 @@ Tách thành **microservice** (các chương trình nhỏ, mỗi cái làm một
 
 ## Bức tranh tổng thể
 
-SimpleStore có hai tầng: trình duyệt nói chuyện với hai giao diện người dùng, các giao diện nói chuyện với một gateway (cổng vào), và gateway chuyển tiếp yêu cầu đến các backend HTTP. Service checkout hoàn toàn không có giao diện HTTP; nó chỉ phản ứng với các thông điệp.
+SimpleStore có hai tầng: trình duyệt giao tiếp với hai ứng dụng web, các ứng dụng này gọi đến gateway (cổng vào), rồi gateway chuyển tiếp request đến các backend HTTP. Checkout không cung cấp API HTTP; service này chỉ xử lý các thông điệp.
 
 ```mermaid
 flowchart LR
@@ -306,7 +306,7 @@ Bước 2 là hành vi của Aspire, không phải mã trong repository này. B�
 - **Khóa không phải base64 hợp lệ.** Các service gọi `Convert.FromBase64String` trên `Jwt:Key`, nên một khóa dạng văn bản thuần sẽ lỗi lúc khởi động hoặc ở lần kiểm tra token đầu tiên.
 - **Gõ sai tên.** `GetConnectionString("catalogdb")` không trả về gì nếu resource trong AppHost được đặt tên khác. Tên resource là sợi dây nối duy nhất.
 - **Chạy một project riêng lẻ.** `dotnet run --project src/SimpleStore.Order.API` chỉ chạy được nếu bạn tự cung cấp connection string và `Jwt__*`. Bình thường hãy để AppHost lo việc đó.
-- **Soft reference có thể bị treo.** Xóa một sản phẩm trong Catalog không đụng đến các order item cũ. Đây là cái giá của các database độc lập.
+- **Soft reference có thể trở thành tham chiếu mồ côi.** Xóa một sản phẩm trong Catalog không ảnh hưởng đến các order item cũ. Đây là cái giá của việc mỗi service sở hữu database riêng.
 - **Mất dữ liệu.** Ở đây chỉ KurrentDB có volume được đặt tên. Tạo lại container Postgres sẽ xóa sạch cả sáu database.
 
 ## Tự thực hành
@@ -323,7 +323,7 @@ Bước 2 là hành vi của Aspire, không phải mã trong repository này. B�
 4. Bấm vào `gateway`, mở phần chi tiết và xem mục environment/configuration. Bạn sẽ thấy các mục được chèn vào cho sáu service mà nó tham chiếu, và các giá trị `Jwt__*` (khóa được che đi).
 5. Bấm vào `checkout` và xác nhận rằng không có mục `Jwt__*` nào và không có HTTP endpoint nào.
 6. Mở pgweb (liên kết nằm trên resource `postgres`). Chọn `orderdb` và chạy `select "Id", "UserId" from "Orders" limit 5;`. Sau đó chọn `identitydb`. Bảng `AspNetUsers` chỉ có ở đó; database của order không có khóa ngoại nào đến nó.
-7. Mở liên kết quản lý RabbitMQ và xem tab **Queues**. Các queue chỉ xuất hiện sau khi các service kết nối; bạn sẽ thấy chúng đầy dần lên ở các chương sau.
+7. Mở liên kết quản lý RabbitMQ và xem tab **Queues**. Các queue chỉ xuất hiện sau khi các service kết nối; chúng sẽ được giới thiệu trong những chương sau.
 
 ## Những điều cần nhớ
 
