@@ -9,7 +9,7 @@
 - Mô hình dữ liệu: `payment_accounts` và sổ cái `payment_transactions`.
 - Cách `DepositAsync` và `DebitForOrderAsync` hoạt động, từng dòng một.
 - Cách outbox (hộp thư đi: bảng lưu thông điệp chờ gửi) và inbox (hộp thư đến: bảng ghi nhớ thông điệp đã xử lý) làm cho việc trừ tiền và message phản hồi của nó an toàn trước sự cố sập và việc giao lại.
-- Cách ví trở thành một "cổng điều khiển được" (controllable gate) cho các buổi demo, kèm một kịch bản từng bước.
+- Cách ví trở thành cơ chế có thể chủ động điều chỉnh để demo checkout thành công hoặc thất bại, kèm theo kịch bản từng bước.
 - Chỗ nào thiếu bảo vệ đồng thời (concurrency), và vì sao điều đó chấp nhận được ở đây nhưng không chấp nhận được trong production.
 
 ---
@@ -273,7 +273,7 @@ Trang chỉ tải 100 người dùng đầu tiên và 100 account đầu tiên, 
 >    2. Thêm một dòng ledger `Payment` với `BalanceAfter`, `OrderId`, `CorrelationId`.
 >    3. Đưa `PaymentSucceededEventV1` vào hàng chờ (với id của dòng ledger làm `TransactionId`).
 > 5. Nếu không, đưa `PaymentFailedEventV1` vào hàng chờ với `Reason = InsufficientFunds`. Không đổi gì khác.
-> 6. `SaveChanges`, rồi `COMMIT`. Số dư, dòng ledger và dòng outbox (hoặc chỉ dòng outbox, khi thất bại) được commit một cách atomic.
+> 6. `SaveChanges`, rồi `COMMIT`. Số dư, dòng ledger và dòng outbox (hoặc chỉ dòng outbox khi thất bại) được commit nguyên tử trong cùng transaction.
 > 7. Outbox relay gửi phản hồi đã xếp hàng tới RabbitMQ, nơi saga nhận lấy nó.
 
 > **Thuật toán: vì sao một request được giao lại không tính tiền hai lần** (câu chuyện về idempotency)
@@ -326,7 +326,7 @@ Bạn cần AppHost đang chạy (`dotnet run --project src/SimpleStore.AppHost`
 
 ## Những điều cần nhớ
 
-- Số dư ví là cổng điều khiển được: số dư lớn hơn nghĩa là `Confirmed`, số dư nhỏ hơn nghĩa là `Cancelled` cộng với việc giải phóng hàng.
+- Có thể chủ động điều chỉnh số dư ví để quyết định kết quả: số dư đủ dẫn đến `Confirmed`, còn số dư không đủ dẫn đến `Cancelled` và giải phóng hàng.
 - `DebitForOrderAsync` giữ thay đổi số dư, dòng ledger và message phản hồi trong một transaction, bằng cách dùng outbox.
 - Việc tính tiền đúng một lần (exactly-once) đến từ inbox (theo từng message id), không phải từ một ràng buộc database trên đơn hàng.
 - Một khoản thanh toán thất bại không ghi dòng ledger nào và không di chuyển đồng tiền nào; compensation là về việc giải phóng hàng, không phải hoàn tiền.

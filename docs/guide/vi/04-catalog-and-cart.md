@@ -2,17 +2,17 @@
 
 > 🇻🇳 Bản tiếng Việt. English version: [04-catalog-and-cart.md](../04-catalog-and-cart.md)
 
-Chương này nói về hai service mà người mua hàng chạm vào đầu tiên: **Catalog** (danh sách sản phẩm, lưu trong PostgreSQL) và **Cart** (giỏ hàng, lưu trong Redis). Bề ngoài cả hai đều nhỏ, nhưng chúng cho bạn thấy ba ý tưởng quan trọng của microservice: đọc và ghi dữ liệu mà service của bạn sở hữu, giữ một *bản sao* dữ liệu của service khác và đồng bộ nó bằng event, và xử lý những khách chưa đăng nhập.
+Chương này nói về hai service đầu tiên mà người mua tương tác: **Catalog** (danh sách sản phẩm, lưu trong PostgreSQL) và **Cart** (giỏ hàng, lưu trong Redis). Bề ngoài cả hai đều nhỏ, nhưng chúng minh họa ba ý tưởng quan trọng của microservice: đọc và ghi dữ liệu do service của bạn sở hữu, giữ một *bản sao* dữ liệu của service khác rồi đồng bộ bằng event, và hỗ trợ khách chưa đăng nhập.
 
 **Bạn sẽ học được**
 
-- Cách Catalog phân trang và tìm kiếm một cách an toàn.
+- Cách Catalog phân trang và tìm kiếm an toàn.
 - Vì sao `Product.Stock` trong Catalog là một cache chỉ đọc, và một event giữ cho nó luôn mới như thế nào.
 - Cách một lần cập nhật sản phẩm được lưu *và* thông báo ra ngoài trong cùng một transaction của database (outbox).
 - Cách key của Cart hoạt động trong Redis (`cart:user:<sub>` và `cart:anon:<guid>`) và cách `ResolveOwner` chọn một trong hai.
 - Cách giỏ hàng ẩn danh được gộp vào giỏ hàng của người dùng khi họ đăng nhập, và vì sao việc gộp này nằm trong một middleware.
 - Cách một thay đổi giá sản phẩm lan ra mọi giỏ hàng bằng Redis `SCAN`, và cái giá phải trả.
-- Cách Cart xuống cấp một cách êm thấm khi Redis không khỏe.
+- Cách Cart tiếp tục hoạt động ở chế độ suy giảm có kiểm soát khi Redis gặp sự cố.
 
 Chương trước: [Chương 3 - Xác thực và mẫu BFF](03-authentication-and-bff.md). Liên quan: [Chương 1](01-architecture-and-aspire.md), [Chương 2](02-gateway-and-api-versioning.md).
 
@@ -27,7 +27,7 @@ Chương trước: [Chương 3 - Xác thực và mẫu BFF](03-authentication-an
 
 > **Thuật ngữ mới: Denormalization (phi chuẩn hóa).** Lưu một bản sao dữ liệu từ nơi khác để bạn không phải tra cứu mỗi lần. Nó làm việc đọc nhanh và giúp các service độc lập, nhưng bạn phải giữ cho bản sao luôn cập nhật.
 
-> **Thuật ngữ mới: Eventual consistency (nhất quán cuối cùng).** Các bản sao sẽ khớp nhau *sớm thôi*, không phải ngay lập tức. Giữa lúc admin lưu sản phẩm và lúc Cart làm mới, một giỏ hàng có thể hiển thị giá cũ trong chốc lát.
+> **Thuật ngữ mới: Eventual consistency (tính nhất quán sau cùng).** Các bản sao sẽ nhất quán sau một khoảng trễ, chứ không phải ngay lập tức. Giữa lúc admin lưu sản phẩm và lúc Cart làm mới, một giỏ hàng có thể hiển thị giá cũ trong chốc lát.
 
 > **Thuật ngữ mới: Idempotent (lũy đẳng).** Một thao tác có cùng kết quả dù bạn chạy một lần hay nhiều lần. Message broker có thể giao cùng một message hai lần, nên consumer cần phải idempotent.
 
@@ -77,7 +77,7 @@ Ai sở hữu cái gì:
 
 File: [CatalogService.cs](../../../src/SimpleStore.Catalog.API/Services/CatalogService.cs)
 
-Mỗi lời gọi danh sách đầu tiên đi qua một đoạn bảo vệ nhỏ, giữ cho các giá trị phân trang hợp lý:
+Mỗi lời gọi lấy danh sách trước hết đi qua một đoạn bảo vệ nhỏ để giữ các giá trị phân trang trong giới hạn hợp lý:
 
 ```csharp
 private static (int page, int pageSize) ClampPaging(int page, int pageSize)
@@ -552,7 +552,7 @@ catch (RedisConnectionException ex)
 
 Một sự cố ngắn sẽ hiển thị một giỏ hàng rỗng thay vì trang lỗi.
 
-- **Việc ghi báo lỗi to và rõ.** `AddItemAsync` và các hàm tương tự dùng `LoadItemsAsync`, hàm không nuốt lỗi. Nếu chúng coi sự cố là "giỏ hàng rỗng", lần `SaveItemsAsync` kế tiếp sẽ ghi đè giỏ hàng thật bằng gần như không có gì. Thay vào đó exception đi tới [RedisExceptionMiddleware.cs](../../../src/SimpleStore.Cart.API/Middleware/RedisExceptionMiddleware.cs), nơi trả về một 503 gọn gàng cùng gợi ý thử lại:
+- **Thao tác ghi trả về lỗi rõ ràng.** `AddItemAsync` và các hàm tương tự dùng `LoadItemsAsync`, hàm không nuốt lỗi. Nếu chúng coi sự cố là "giỏ hàng rỗng", lần `SaveItemsAsync` kế tiếp sẽ ghi đè giỏ hàng thật bằng gần như không có gì. Thay vào đó exception đi tới [RedisExceptionMiddleware.cs](../../../src/SimpleStore.Cart.API/Middleware/RedisExceptionMiddleware.cs), nơi trả về lỗi 503 cùng hướng dẫn thử lại:
 
 ```csharp
 ctx.Response.Clear();
@@ -568,7 +568,7 @@ ctx.Response.ContentType = "application/problem+json";
 - **Mất cập nhật trong giỏ hàng.** `AddItemAsync`, `UpdateItemAsync` và `MergeAsync` đọc cả danh sách, sửa nó trong bộ nhớ và ghi lại. Hai request cho cùng một giỏ hàng vào cùng một thời điểm (hai tab) có thể ghi đè lên nhau. Việc gộp thêm một khoảng hở nữa: consumer fan-out hoặc một tab khác có thể ghi vào giỏ hàng đích giữa lúc đọc và lúc ghi của việc gộp.
 - **Việc gộp có thể làm rơi một giỏ hàng.** Middleware bắt mọi exception của việc gộp, ghi một cảnh báo và xóa cookie `ss_cart` "bất kể kết quả". Nếu lời gọi gộp thất bại (ví dụ một 503 từ Redis), giỏ hàng ẩn danh bị bỏ mồ côi trong Redis cho đến khi hạn sliding 30 ngày xóa nó, và người dùng không bao giờ thấy nó.
 - **Chi phí fan-out tăng theo từng giỏ hàng.** Việc quét tỉ lệ tuyến tính với số key giỏ hàng, chạy ở mỗi lần sửa sản phẩm, và phát ra một lệnh `GET` cho mỗi key. Với bản demo thì ổn, còn với hàng triệu giỏ hàng thì là vấn đề thật. Không có reverse index.
-- **Giá cũ trong giỏ hàng.** Các dòng giỏ hàng giữ một bản sao của giá. Cho đến khi event được xử lý (hoặc nếu nó bị mất), giỏ hàng hiển thị giá cũ. Ngoài ra, storefront gửi tên và giá khi thêm vào giỏ (`CartController.Add` điền chúng từ một lần tra cứu Catalog), và Cart.API tin vào những gì nó nhận được. Số tiền khách hàng thực sự bị tính được quyết định về sau, trong service Order (xem [Chương 5](05-orders-and-outbox.md)).
+- **Giá cũ trong giỏ hàng.** Các dòng giỏ hàng giữ một bản sao của giá. Cho đến khi event được xử lý (hoặc nếu event bị mất), giỏ hàng vẫn hiển thị giá cũ. Storefront gửi tên và giá khi thêm sản phẩm vào giỏ (`CartController.Add` điền các giá trị này từ Catalog), và Cart.API tin vào dữ liệu nhận được. Order tính tổng tiền từ `UnitPrice` trong request nhưng chưa xác minh lại giá với Catalog (xem [Chương 5](05-orders-and-outbox.md)).
 - **Event trùng lặp.** Cart không có inbox, nên một `ProductUpdatedEventV1` bị giao trùng sẽ chạy lại toàn bộ lần quét. Việc đó lãng phí nhưng đúng, vì các lần ghi là idempotent.
 - **Event sai thứ tự.** Nếu hai lần sửa cùng một sản phẩm được giao sai thứ tự, các giá trị cũ hơn có thể ghi đè giá trị mới hơn. Event không mang version hay timestamp nào để consumer so sánh.
 - **Độ trễ tồn kho.** `Product.Stock` hiển thị trên storefront có thể chậm hơn Inventory bởi độ trễ của projector và broker. Bảo vệ chống bán quá số lượng là việc của Inventory, không phải của Catalog.
@@ -587,7 +587,7 @@ Chạy hệ thống: `dotnet run --project src/SimpleStore.AppHost`. Dùng Aspir
 4. **Quyền sở hữu giỏ hàng.** Trong RedisInsight, xem TTL của một key giỏ hàng. Thêm một item khác và xem TTL nhảy lại về khoảng 30 ngày (hạn sliding).
 5. **Fan-out.** Khi đã có một sản phẩm trong giỏ, đăng nhập vào Admin bằng `admin@simplestore.local` / `Admin123!`, mở *Products*, đổi giá của sản phẩm đó và lưu. Tải lại giỏ hàng trên storefront: dòng đó hiển thị giá mới mà không ai đụng tới giỏ hàng. Trong RabbitMQ management bạn có thể thấy luồng message; trong Aspire dashboard *Metrics*, xem `simplestore.cart.fanout.duration` (với các tag `scanned` và `touched`) cho resource Cart, và trong *Structured logs* tìm dòng "Refreshed N cart(s)".
 6. **Cache tồn kho.** Admin UI không có trang inventory, nên hãy dùng API. Đăng nhập qua gateway bằng tài khoản admin (`POST /api/v1/identity/login`, xem [Chương 3](03-authentication-and-bff.md)) và gửi `POST /api/v1/inventory/receipt-notes` với access token của admin trong header Bearer và một body như `{"id": "<a new GUID>", "lines": [{"productId": 1, "quantity": 5}]}`. Một lúc sau tải lại trang sản phẩm trên storefront: tồn kho của sản phẩm 1 đã tăng thêm 5, do `StockLevelChangedEventV1` thúc đẩy chứ không phải do bất cứ việc gì Catalog tự làm. Hãy mở cả trình soạn sản phẩm trong Admin: không có trường tồn kho.
-7. **Xuống cấp êm thấm.** Dừng container `cart-redis` (từ dashboard hoặc Docker). Tải lại storefront: giỏ hàng hiển thị rỗng. Bấm "Add to cart": lời gọi thất bại với một 503 và header `Retry-After` thay vì lặng lẽ làm mất giỏ hàng. Khởi động lại Redis và thử lại.
+7. **Chế độ suy giảm có kiểm soát.** Dừng container `cart-redis` (từ dashboard hoặc Docker). Tải lại storefront: giỏ hàng hiển thị rỗng. Bấm "Add to cart": lời gọi thất bại với lỗi 503 và header `Retry-After`, thay vì lặng lẽ làm mất giỏ hàng. Khởi động lại Redis và thử lại.
 
 ---
 
@@ -599,7 +599,7 @@ Chạy hệ thống: `dotnet run --project src/SimpleStore.AppHost`. Dùng Aspir
 - Cart lưu một danh sách JSON cho mỗi chủ sở hữu dưới `cart:user:<sub>` hoặc `cart:anon:<guid>`, với hạn sliding 30 ngày; `sub` của JWT luôn thắng `X-Cart-Id`.
 - Giỏ hàng ẩn danh được gộp bởi `CartMergeMiddleware` ở request đã xác thực đầu tiên, vì bản thân POST đăng nhập chưa có session cookie.
 - Các dòng giỏ hàng là bản sao denormalize được làm mới bởi một consumer idempotent đi SCAN tất cả giỏ hàng; cách này đơn giản, tuyến tính theo số giỏ hàng, và được đo bằng `simplestore.cart.fanout.duration`.
-- Việc đọc xuống cấp về giỏ hàng rỗng; việc ghi trả về 503 để giỏ hàng không bao giờ bị ghi đè bằng dữ liệu xấu.
+- Khi Redis gặp sự cố, thao tác đọc trả về giỏ hàng rỗng; thao tác ghi trả về 503 để tránh ghi đè giỏ hàng bằng dữ liệu không đầy đủ.
 
 ## Chương tiếp theo
 

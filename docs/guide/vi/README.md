@@ -85,7 +85,7 @@ flowchart LR
 | **Aggregate** | Nhóm nhỏ các đối tượng bảo đảm một quy tắc nghiệp vụ và được lưu, tải như một đơn vị | [7](07-inventory-event-sourcing-cqrs.md) |
 | **CQRS** | Dùng một mô hình để thay đổi dữ liệu (command) và một mô hình khác để đọc dữ liệu (query) | [7](07-inventory-event-sourcing-cqrs.md) |
 | **Projection** | Tiến trình chạy nền chuyển event thành các bảng được tối ưu cho việc đọc | [7](07-inventory-event-sourcing-cqrs.md) |
-| **Eventual consistency** (nhất quán cuối cùng) | Các phần của hệ thống đạt trạng thái nhất quán với nhau *sau một khoảng trễ ngắn*, chứ không phải ngay lập tức | [7](07-inventory-event-sourcing-cqrs.md) |
+| **Eventual consistency** (tính nhất quán sau cùng) | Các phần của hệ thống đạt trạng thái nhất quán với nhau *sau một khoảng trễ ngắn*, chứ không phải ngay lập tức | [7](07-inventory-event-sourcing-cqrs.md) |
 | **Idempotent** (có tính lũy đẳng) | Thực hiện hai lần cho kết quả tương đương với thực hiện một lần | [4](04-catalog-and-cart.md), [5](05-orders-and-outbox.md) |
 | **Circuit breaker** (cầu dao) | Tạm ngừng gọi một dependency đang lỗi để dependency đó có thời gian hồi phục | [9](09-resilience-and-observability.md) |
 | **Distributed trace** (trace phân tán) | Một dòng thời gian duy nhất theo dõi request xuyên suốt các service | [9](09-resilience-and-observability.md) |

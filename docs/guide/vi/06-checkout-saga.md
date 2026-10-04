@@ -1,7 +1,7 @@
 # Chương 6: Checkout Saga
 > 🇻🇳 Bản tiếng Việt. English version: [06-checkout-saga.md](../06-checkout-saga.md)
 
-Sau khi một đơn hàng được lưu, ba service nữa phải phối hợp với nhau trước khi đơn có thể được xác nhận: Inventory phải giữ hàng lại, Payment phải thu tiền, và Order phải được báo kết quả. Không có giao dịch database (transaction) đơn lẻ nào bao trùm được các service đó, nên SimpleStore dùng saga: một quy trình chạy dài, được điều khiển bởi một state machine (máy trạng thái) nhớ mỗi đơn đang ở đâu, và biết cách hoàn tác các bước trước đó khi một bước sau thất bại. Chương này đi qua `SimpleStore.Checkout.API`, service chứa state machine đó.
+Sau khi một đơn hàng được lưu, ba service nữa phải phối hợp trước khi đơn có thể được xác nhận: Inventory phải giữ hàng, Payment phải thu tiền, và Order cần nhận thông báo về kết quả. Không có transaction database đơn lẻ nào bao trùm được các service đó, nên SimpleStore dùng saga: một quy trình chạy dài do state machine (máy trạng thái) điều khiển. State machine theo dõi trạng thái của từng đơn và biết cách bù trừ các bước trước đó khi một bước sau thất bại. Chương này tìm hiểu `SimpleStore.Checkout.API`, service chứa state machine đó.
 
 **Bạn sẽ học được**
 
@@ -97,7 +97,7 @@ sequenceDiagram
 
 ## Đi qua mã nguồn
 
-### 1. Checkout.API được nối dây như một consumer thuần túy
+### 1. Checkout.API được đăng ký làm consumer thuần túy
 
 [Program.cs](../../../src/SimpleStore.Checkout.API/Program.cs) đăng ký state machine và phần lưu trữ của nó:
 
@@ -112,7 +112,7 @@ sequenceDiagram
 ```
 
 - `EntityFrameworkRepository` lưu mỗi saga instance thành một dòng thông qua `CheckoutDbContext`.
-- `ConcurrencyMode.Pessimistic` nghĩa là trong lúc một message đang được xử lý cho một saga instance, MassTransit khóa dòng đó, nên hai message của cùng một đơn được xử lý lần lượt, cái này sau cái kia.
+- `ConcurrencyMode.Pessimistic` nghĩa là trong lúc một message đang được xử lý cho một saga instance, MassTransit khóa dòng đó, nhờ vậy các message của cùng một đơn được xử lý tuần tự.
 - Cùng file đó cũng bật EF Core bus outbox (`AddEntityFrameworkOutbox<CheckoutDbContext>` với `UseBusOutbox()`), cùng cơ chế như trong [Chương 5](05-orders-and-outbox.md). Các message mà saga publish được ghi vào outbox (hộp thư đi: bảng lưu các message chờ gửi) trong cùng một transaction với việc đổi trạng thái saga, nên "trạng thái đã chuyển" và "lệnh tiếp theo đã được gửi" không thể lệch nhau.
 - Các cài đặt bus thông thường (heartbeat, `UseMessageRetry` với 5 lần thử theo cấp số nhân, `UseCircuitBreaker`) cũng nằm ở đây; xem [Chương 9](09-resilience-and-observability.md).
 
@@ -207,7 +207,7 @@ Sau đó mã publish `ReserveStockRequestedEventV1` (một `ReservationLineItem`
                 .Schedule(PaymentTimeout, ctx => new PaymentTimeoutExpired { CorrelationId = ctx.Saga.CorrelationId })
 ```
 
-Câu trả lời về hàng đã đến kịp lúc, nên timeout của bước giữ hàng bị hủy (`Unschedule`) và một timeout thanh toán được bắt đầu. Sau đó saga publish `ProcessPaymentRequestedEventV1` mang theo `OrderId`, `UserId` và `Amount` đã lưu, rồi chuyển sang `AwaitingPayment`. Hai nhánh thất bại của `AwaitingStock` (`StockReservationFailed` và timeout) đều publish `OrderCancelledEventV1` và đi thẳng tới `Cancelled`; không có gì cần hoàn tác vì Inventory chưa giữ gì cả.
+Phản hồi về việc giữ hàng đã đến kịp lúc, nên timeout của bước giữ hàng bị hủy (`Unschedule`) và timeout thanh toán được bắt đầu. Sau đó saga publish `ProcessPaymentRequestedEventV1` mang theo `OrderId`, `UserId` và `Amount` đã lưu, rồi chuyển sang `AwaitingPayment`. Hai nhánh thất bại của `AwaitingStock` (`StockReservationFailed` và timeout) đều publish `OrderCancelledEventV1` và đi thẳng tới `Cancelled`; không có gì cần bù trừ vì Inventory chưa giữ hàng.
 
 ### 6. Thanh toán thất bại: chạy compensation
 
@@ -249,7 +249,7 @@ Câu trả lời về hàng đã đến kịp lúc, nên timeout của bước g
 
 Vì vậy `checkout_saga_state` chỉ chứa các đơn vẫn đang xử lý dở. Một đơn đã hoàn tất không để lại dòng nào (dấu vết kiểm toán nằm trong log và trace).
 
-### 8. Hàm hỗ trợ quan sát (observability)
+### 8. Hàm hỗ trợ khả năng quan sát (observability)
 
 `LogTransition` ghi dòng log `Saga {CorrelationId} order {OrderId}: {FromState} -> {ToState}.` (kèm lý do nếu có) và đặt các tag như `saga.state.from` và `saga.state.to` lên activity của trace hiện tại. Nhờ vậy bạn có thể theo dõi một đơn hàng xuyên qua các service trong Aspire dashboard ([Chương 9](09-resilience-and-observability.md)).
 
@@ -331,8 +331,8 @@ Các lý do hủy bạn sẽ thấy trong `OrderCancelledEventV1.Reason`, trong 
 3. Trace. Trong **Traces**, mở trace bắt đầu từ `POST /api/v1/order/orders`. Các span của saga mang các tag `saga.state.from` và `saga.state.to`.
 4. RabbitMQ management (resource `rabbitmq`, tab **Queues**): bạn sẽ thấy các queue cho saga và cho consumer của mỗi service. Tốc độ message tăng lên thoáng chốc khi bạn đặt một đơn hàng.
 5. pgweb, database `checkoutdb`: `SELECT * FROM checkout_saga_state;`. Thường nó rỗng, vì các saga đã xong bị xóa. Để bắt được một dòng đang xử lý dở, hãy làm thí nghiệm bên dưới.
-6. **Cố ý làm hỏng, phần 1: không đủ tiền.** Hãy chắc chắn ví của khách hàng demo trống hoặc thấp hơn tổng tiền đơn (**Payments** trong Admin hiển thị số dư). Đặt một đơn cho một sản phẩm, và ghi lại tồn kho của nó trên storefront hoặc trong Admin trước khi đặt. Trong log của `checkout` bạn sẽ thấy `AwaitingStock -> AwaitingPayment`, rồi `AwaitingPayment -> CompensatingStock (InsufficientFunds)`, rồi `CompensatingStock -> Cancelled (InsufficientFunds)`. Trạng thái đơn trở thành `Cancelled`, và sau khi projector của Inventory và Catalog đã xử lý cập nhật, tồn kho của sản phẩm trở về giá trị ban đầu.
-7. **Cố ý làm hỏng, phần 2: một payment service đã chết.** Dừng resource `payment` trong dashboard, đặt một đơn hàng, và nhanh chóng chạy `SELECT "CorrelationId", "CurrentState", "FailureReason" FROM checkout_saga_state;` trong pgweb. Bạn sẽ thấy `AwaitingPayment`. Sau khoảng 30 giây log hiển thị `AwaitingPayment -> CompensatingStock (PaymentTimeout)` và đơn kết thúc ở `Cancelled` với tồn kho được khôi phục. Bước tiếp theo tùy chọn: khởi động lại `payment` và quan sát log cũng như ví của nó. Dự đoán của chúng tôi từ thiết kế, mà bạn nên kiểm chứng, là yêu cầu nằm trong queue giờ được xử lý, nên một dòng sổ cái `Payment` có thể xuất hiện cho một đơn đã bị hủy. Đó là lỗ hổng thanh toán muộn đã mô tả ở trên.
+6. **Thử tình huống lỗi, phần 1: không đủ tiền.** Hãy chắc chắn ví của khách hàng demo trống hoặc có số dư thấp hơn tổng tiền đơn (**Payments** trong Admin hiển thị số dư). Đặt một đơn cho một sản phẩm và ghi lại tồn kho trước khi đặt. Trong log của `checkout` bạn sẽ thấy `AwaitingStock -> AwaitingPayment`, rồi `AwaitingPayment -> CompensatingStock (InsufficientFunds)`, rồi `CompensatingStock -> Cancelled (InsufficientFunds)`. Trạng thái đơn trở thành `Cancelled`; sau khi projector của Inventory và Catalog xử lý cập nhật, tồn kho của sản phẩm trở về giá trị ban đầu.
+7. **Thử tình huống lỗi, phần 2: Payment service ngừng hoạt động.** Dừng resource `payment` trong dashboard, đặt một đơn hàng, rồi nhanh chóng chạy `SELECT "CorrelationId", "CurrentState", "FailureReason" FROM checkout_saga_state;` trong pgweb. Bạn sẽ thấy `AwaitingPayment`. Sau khoảng 30 giây, log hiển thị `AwaitingPayment -> CompensatingStock (PaymentTimeout)` và đơn kết thúc ở `Cancelled` với tồn kho được khôi phục. Bước tiếp theo không bắt buộc: khởi động lại `payment` và quan sát log cũng như số dư tài khoản. Theo thiết kế, yêu cầu đang chờ trong queue có thể được xử lý khi service hoạt động trở lại, khiến một dòng `Payment` xuất hiện trong sổ cái của đơn đã bị hủy; hãy tự kiểm chứng điều này. Đây là lỗ hổng thanh toán muộn đã nêu ở trên.
 
 ## Những điều cần nhớ
 
