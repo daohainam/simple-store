@@ -151,7 +151,7 @@ flowchart LR
   Q --> C["Catalog StockLevelChangedConsumer"]
 ```
 
-*Cách đọc:* một publisher không bao giờ gửi tới một queue. Nó gửi tới một exchange (bộ phân phối) đặt tên theo kiểu message, và mỗi service consumer có queue riêng gắn (bind) vào exchange đó.
+*Cách đọc:* publisher không gửi trực tiếp tới queue. Nó gửi tới một exchange được đặt tên theo kiểu message; mỗi consumer có queue riêng được gắn (bind) vào exchange đó.
 
 - **Publishing** đi tới một exchange được suy ra từ namespace CLR và tên kiểu của message, ví dụ `SimpleStore.Contracts:StockLevelChangedEventV1`. Trong một bài thử nghiệm, một kiểu có attribute ghim vẫn có exchange đặt theo tên CLR của nó, không phải theo URN, nên việc ghim không kiểm soát tên exchange.
 - **Consuming**: `ConfigureEndpoints` tạo một queue cho mỗi class consumer, với tên dạng kebab-case và bỏ hậu tố `Consumer` (`ReserveStockRequestedConsumer` thành `reserve-stock-requested`; `OrderConfirmedConsumer` thành `order-confirmed`), và gắn nó vào exchange của kiểu message mà consumer xử lý. Nếu hai service cùng consume một event, mỗi service có queue riêng và mỗi service nhận bản sao của riêng mình. Saga cũng có queue riêng; hãy đọc tên của nó trong giao diện quản lý.
@@ -292,7 +292,7 @@ HTTP API, integration event và domain event của Inventory mỗi loại có đ
 | Phiên bản hoặc kiểu không rõ | 404 | Các JSON property không rõ bị bỏ; không có URN khớp nghĩa là không có handler | Projector bỏ qua event và đếm nó |
 | `V2` chạy song song với `V1` | Cùng một backend phục vụ cả hai | Record và URN riêng | Cả hai kiểu ở lại trong registry mãi mãi |
 
-Việc đánh phiên bản HTTP được đề cập trong [chương 2](02-gateway-and-api-versioning.md): gateway chuyển tiếp `/api/v1/...` nguyên vẹn, và mỗi backend khai báo các phiên bản của mình một cách tự nhiên (native).
+Việc đánh phiên bản HTTP được đề cập trong [chương 2](02-gateway-and-api-versioning.md): gateway chuyển tiếp `/api/v1/...` nguyên vẹn, còn mỗi backend tự phục vụ phiên bản API của mình.
 
 Các domain event của Inventory thêm ba thứ lên trên, tất cả từ v11:
 

@@ -6,10 +6,10 @@
 
 **Bạn sẽ học được**
 
-- Event sourcing và CQRS nghĩa là gì, qua những đoạn mã mà bạn có thể mở ra xem.
+- Event sourcing và CQRS là gì, qua các đoạn mã có thể xem trực tiếp.
 - Một aggregate (`Reservation`) quyết định, ghi lại và phát lại (replay) event như thế nào.
 - Vì sao event store nằm sau một interface (`IEventStore`) và optimistic concurrency làm cho việc retry trở nên an toàn ra sao.
-- Một projector chạy nền biến event thành các bảng read, lưu checkpoint tiến độ của nó và publish integration event một cách nguyên tử như thế nào.
+- Cách projector chạy nền chuyển event thành các bảng read, lưu checkpoint tiến độ và publish integration event trong cùng một transaction.
 - Một reservation và compensation của nó (việc nhả hàng) chạy từ đầu đến cuối ra sao.
 - Cách dựng lại toàn bộ read model bằng cách xóa nó đi rồi khởi động lại.
 - Vì sao bạn nên, và không nên, dùng mẫu thiết kế này trong một hệ thống thật.
@@ -230,7 +230,7 @@ Vì sao điều này quan trọng: id của note do bên gọi chọn (một `Gu
         note.MarkEventsCommitted();
 ```
 
-Có hai điều cần để ý. Thứ nhất, handler hoàn toàn không đụng tới Postgres. Thứ hai, DTO mà nó trả về được dựng từ aggregate trong bộ nhớ, không phải từ các bảng read. Projector chưa chạy, nên một lệnh `GET /receipt-notes/{id}` ngay sau đó có thể trả về 404 trong chốc lát. Đó là eventual consistency (nhất quán cuối cùng), và là cái giá của CQRS.
+Có hai điều cần để ý. Thứ nhất, handler hoàn toàn không đụng tới Postgres. Thứ hai, DTO mà nó trả về được dựng từ aggregate trong bộ nhớ, không phải từ các bảng read. Projector chưa chạy, nên một lệnh `GET /receipt-notes/{id}` ngay sau đó có thể trả về 404 trong chốc lát. Đó là eventual consistency (tính nhất quán sau cùng), một trong những đánh đổi của CQRS.
 
 [ReceiptNoteEndpoints.cs](../../../src/SimpleStore.Inventory.API/Endpoints/ReceiptNoteEndpoints.cs) ánh xạ `DomainException` thành 400 và `ConcurrencyConflictException` thành 409. Delivery note hoạt động tương tự. Không có HTTP endpoint nào cho reservation: chúng chỉ tồn tại trên message bus.
 
@@ -443,7 +443,7 @@ Ba phương thức còn lại dùng `AnyAsync` theo id của note để chặn: 
 
 Việc publish được kiểm soát bởi `isLive`. Trong lúc phát lại khi khởi động nguội (cold-start replay) nó là `false`, nên việc dựng lại read model không làm RabbitMQ bị ngập bởi toàn bộ lịch sử một lần nữa.
 
-### 9. Đọc: SQL thuần, nhất quán cuối cùng
+### 9. Đọc: SQL thuần, eventual consistency
 
 [StockEndpoints.cs](../../../src/SimpleStore.Inventory.API/Endpoints/StockEndpoints.cs) đọc `stock_levels` và `stock_movements` bằng các truy vấn EF `AsNoTracking()`; không dính dáng tới event store. Một sản phẩm chưa từng có movement thì không có dòng nào, và endpoint nói rõ điều đó thay vì giả vờ rằng tồn kho bằng không:
 
@@ -627,7 +627,7 @@ Một quy tắc hợp lý: dùng nó ở nơi bản thân lịch sử có giá t
 
 - **Tình huống tranh chấp bán vượt mức (một đánh đổi đã được ghi lại).** Khóa `FOR UPDATE` bảo vệ việc *đọc* `stock_levels`, nhưng `OnHand` bị trừ sau đó bởi projector, không phải bởi handler. Hai reservation đến trước khi projector áp dụng cái đầu tiên có thể cùng thấy đủ hàng và cùng thành công. Ví dụ: `OnHand = 5`; reservation A muốn 5, qua kiểm tra, event của nó được append; trước khi projector chạy, reservation B muốn 5, đọc `OnHand = 5` (khóa của A đã được nhả), và cũng qua kiểm tra. Sau khi projection, `OnHand` là `-5`. `stock_levels.OnHand` được phép âm. Comment đầu handler và [docs/checkout-saga.md](../../checkout-saga.md) mục 10.2 mô tả khoảng hở này. Một thiết kế production sẽ kiểm tra dựa trên một giá trị được cập nhật trong cùng một bước nguyên tử, hoặc tuần tự hóa trên aggregate sở hữu tồn kho.
 - **Các event tồn đọng không được publish sau khi khởi động lại.** `IsLive` chỉ trở thành `true` sau marker `CaughtUp`, bất kể vì sao subscription bắt đầu ở phía sau. Nếu service ngừng hoạt động trong lúc một reservation được append, event đó được phát lại với `IsLive = false` sau khi khởi động lại: các bảng được cập nhật, nhưng `StockReservedEventV1` không được publish. Khi đó saga sẽ phải dựa vào timeout reservation của nó (xem [chương 6](06-checkout-saga.md)). Điều này suy ra từ việc đọc `SubscribeAllAsync` và các phép kiểm tra `isLive`; nó không được bao phủ bởi một test nào.
-- **Một event "bị đầu độc" làm projector đứng yên.** Nếu việc áp dụng một event ném exception mỗi lần, vòng lặp ngoài nạp lại cùng checkpoint và gặp lại nó, mãi mãi, với 30 s nghỉ giữa các lần. Không có gì sau nó được projection. Hãy theo dõi gauge `simplestore.inventory.projector.lag` và log lỗi.
+- **Một event "bị đầu độc" làm projector đứng yên.** Nếu việc áp dụng một event ném exception mỗi lần, vòng lặp ngoài nạp lại cùng checkpoint và gặp lại nó mãi mãi, với 30 giây nghỉ giữa các lần. Vì vậy, các event sau đó không được áp dụng vào read model. Hãy theo dõi gauge `simplestore.inventory.projector.lag` và log lỗi.
 - **Back-off không được đặt lại khi có tiến triển.** `backoff = MinBackoff` chỉ chạy khi subscription trả về bình thường. Một subscription chạy lâu đã xử lý nhiều event rồi mới bị ngắt vẫn chờ với độ trễ còn sót lại từ các lần lỗi trước đó.
 - **Chỉ chạy đúng với một replica.** Không có lease trên checkpoint. Hai bản sao của service sẽ cùng subscribe và chạy đua trên cùng một dòng checkpoint và cùng các dòng read-model. Để scale out cần persistent subscription với một consumer group.
 - **Append và commit Postgres nằm ở hai kho riêng biệt.** Nếu append vào KurrentDB thành công rồi commit Postgres thất bại, một lần retry gặp xung đột `NoStream` và được coi là thành công, điều đó là đúng. Chiều ngược lại (commit mà không append) không thể xảy ra vì không có gì khác được lưu trên đường thành công.
@@ -664,7 +664,7 @@ Khởi động mọi thứ bằng `dotnet run --project src/SimpleStore.AppHost`
 ## Những điều cần nhớ
 
 - Event sourcing lưu những gì đã xảy ra; trạng thái hiện tại được suy ra. Phương thức `Apply` của aggregate là nơi duy nhất trạng thái thay đổi, cho cả event mới lẫn event được phát lại.
-- CQRS tách việc ghi (KurrentDB, qua handler và aggregate) khỏi việc đọc (các bảng Postgres, qua projector). Chúng chỉ được nối với nhau bằng các event, nên việc đọc là nhất quán cuối cùng.
+- CQRS tách việc ghi (KurrentDB, qua handler và aggregate) khỏi việc đọc (các bảng Postgres, qua projector). Chúng chỉ được nối với nhau bằng event, nên read model có thể chậm hơn phía ghi một khoảng ngắn.
 - Optimistic concurrency (`NoStream`, `StreamRevision`) cộng với các id do client cung cấp làm cho retry và việc giao lại trở nên vô hại.
 - Projector commit lần ghi read-model, checkpoint và các thông điệp gửi đi trong một transaction, và dùng `IsLive` để một lần phát lại không bao giờ publish lại lịch sử.
 - Các bảng read là những cache dùng một lần: xóa chúng và khởi động lại để dựng lại.

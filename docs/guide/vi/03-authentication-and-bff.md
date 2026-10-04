@@ -1,7 +1,7 @@
 # Chương 3 - Xác thực (authentication) và mô hình BFF
 > 🇻🇳 Bản tiếng Việt. English version: [03-authentication-and-bff.md](../03-authentication-and-bff.md)
 
-Chương này giải thích cách một người dùng chứng minh "tôi là ai" trong SimpleStore, và cách bằng chứng đó đi an toàn giữa trình duyệt, hai ứng dụng web front end, một gateway và nhiều API. Bạn sẽ đi theo một lần đăng nhập từ trình duyệt đến tận database, rồi xem chuyện gì xảy ra một giờ sau đó khi access token hết hạn.
+Chương này giải thích cách người dùng chứng minh danh tính trong SimpleStore, và cách thông tin xác thực được truyền an toàn giữa trình duyệt, hai ứng dụng web, gateway và các API. Bạn sẽ theo dõi một lần đăng nhập từ trình duyệt đến database, rồi xem điều gì xảy ra khi access token hết hạn.
 
 **Bạn sẽ học được**
 
@@ -76,7 +76,7 @@ sequenceDiagram
     Note over B,W: From now on the browser sends only the cookie
 ```
 
-*Cách đọc: thời gian chảy từ trên xuống. Token dừng lại ở cache; chỉ một session id vô nghĩa (opaque) được trả về cho trình duyệt.*
+*Cách đọc: thời gian chảy từ trên xuống. Token được giữ trong cache; trình duyệt chỉ nhận một mã phiên opaque, không chứa thông tin xác thực.*
 
 ---
 
@@ -118,7 +118,7 @@ foreach (var role in roles)
 - `jti` là id duy nhất của token này.
 - Mỗi role (`Admin`, `Customer`) được thêm thành một claim `role`. Các service kiểm tra chúng để phân quyền (authorization).
 
-Token cũng có `iss`/`aud` (issuer và audience), `nbf` (not before = lúc này) và `exp` (hết hạn). Vậy thời hạn là bao lâu? [JwtOptions.cs](../../../src/SimpleStore.Identity.API/Services/JwtOptions.cs) đặt mặc định `AccessTokenMinutes` là **60**, và [appsettings.json](../../../src/SimpleStore.Identity.API/appsettings.json) cũng đặt là 60. Refresh token mặc định sống 30 ngày. (Một số ghi chú cũ trong `docs/` nói 15 phút; code ghi 60.)
+Token cũng có `iss`/`aud` (issuer và audience), `nbf` (not before = thời điểm bắt đầu có hiệu lực) và `exp` (thời điểm hết hạn). Vậy thời hạn là bao lâu? [JwtOptions.cs](../../../src/SimpleStore.Identity.API/Services/JwtOptions.cs) đặt mặc định `AccessTokenMinutes` là **60**, và [appsettings.json](../../../src/SimpleStore.Identity.API/appsettings.json) cũng đặt là 60. Refresh token mặc định có thời hạn 30 ngày. (Một số ghi chú cũ trong `docs/` nói 15 phút; code ghi 60.)
 
 Bản thân khóa không bao giờ nằm trong repository. AppHost truyền `Jwt__Key`, `Jwt__Issuer` và `Jwt__Audience` cho mọi service cần kiểm tra token (xem [Chương 1](01-architecture-and-aspire.md)).
 
@@ -166,7 +166,7 @@ _db.RefreshTokens.Add(new RefreshToken
 await _db.SaveChangesAsync(cancellationToken);
 ```
 
-Việc thu hồi dòng cũ và chèn dòng mới diễn ra trong một lần `SaveChangesAsync` duy nhất; EF Core bọc nó trong một transaction database, nên bạn không bao giờ rơi vào tình huống có không token hợp lệ nào hoặc có hai token hợp lệ sau một lần xoay vòng.
+Việc thu hồi dòng cũ và chèn dòng mới diễn ra trong cùng một lần `SaveChangesAsync`. EF Core thực hiện hai thay đổi đó trong một transaction database, nhờ vậy mỗi lần xoay vòng không khiến hệ thống rơi vào trạng thái không có token hợp lệ hoặc có hai token hợp lệ.
 
 > **Thuật toán: xoay vòng refresh token (refresh token rotation)**
 >
@@ -498,7 +498,7 @@ Mọi lưu lượng từ BFF đến API đều đi qua gateway, nơi *lại* ki�
 - **Session cookie không có hạn rõ ràng.** `ss_session` được đặt mà không có `Expires`, nên trình duyệt thường bỏ nó khi đóng, trong khi entry trong cache vẫn sống cho đến hết cửa sổ trượt 30 ngày. Checkbox "Remember me" trên form đăng nhập của Web được bind vào `Input.RememberMe`, nhưng handler hiển thị ở trên không bao giờ đọc nó.
 - **Login không đổi session id.** `SetAsync` dùng lại giá trị cookie `ss_session` có sẵn nếu trình duyệt đã có, nên cùng một id tiếp tục giữa trạng thái ẩn danh và đã đăng nhập.
 - **Khóa ký được chia sẻ.** HS256 nghĩa là mọi service có thể *kiểm tra* token cũng có thể *làm giả* token. Điều đó chấp nhận được trong một ranh giới tin cậy (trust boundary); bước nâng cấp thường thấy là thuật toán bất đối xứng (RS256) với public key được công bố.
-- **Access token không thể bị thu hồi sớm.** Khóa một user trong Admin không làm mất hiệu lực các access token đã phát; nó chỉ chặn các lần đăng nhập và refresh mới.
+- **Access token không thể bị thu hồi sớm.** Khóa tài khoản người dùng trong Admin không làm mất hiệu lực các access token đã phát; thao tác này chỉ chặn các lần đăng nhập và refresh mới.
 
 ---
 

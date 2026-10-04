@@ -1,13 +1,13 @@
 # Chương 5: Orders và Transactional Outbox
 > 🇻🇳 Bản tiếng Việt. English version: [05-orders-and-outbox.md](../05-orders-and-outbox.md)
 
-Đặt hàng là khoảnh khắc yêu cầu của một khách hàng SimpleStore biến thành một chuỗi công việc trải rộng trên bốn service. Chương này xem mắt xích đầu tiên của chuỗi đó: cách `Order.API` lưu một đơn hàng và thông báo cho phần còn lại của hệ thống mà không bao giờ làm mất thông báo. Mẹo này gọi là transactional outbox (hộp thư đi trong transaction), và nó là một trong những pattern hữu ích nhất trong các hệ thống hướng sự kiện (event-driven).
+Khi khách hàng đặt hàng, một chuỗi công việc bắt đầu và trải dài qua bốn service. Chương này tập trung vào mắt xích đầu tiên: cách `Order.API` lưu đơn hàng và thông báo cho phần còn lại của hệ thống mà không làm mất thông điệp. Mẫu này được gọi là transactional outbox (hộp thư đi trong transaction), một trong những pattern hữu ích nhất trong các hệ thống hướng sự kiện (event-driven).
 
 **Bạn sẽ học được**
 
 - `OrderService.CreateOrderAsync` làm gì, từng bước một, và vì sao nó gọi `SaveChangesAsync` hai lần.
 - "Dual-write problem" (vấn đề ghi kép) là gì và vì sao kiểu "lưu rồi mới publish" đơn thuần là không an toàn.
-- Các bảng outbox và inbox giúp bạn có việc gửi thông điệp đáng tin cậy, "gần như chính xác một lần" (effectively exactly-once) như thế nào.
+- Cách các bảng outbox và inbox giúp gửi thông điệp đáng tin cậy, với cơ chế giao ít nhất một lần và khử trùng lặp ở phía nhận.
 - Các giá trị `OrderStatus` có nghĩa gì và đoạn code nào được phép thay đổi chúng.
 - Những phần nào của code đơn hàng là các đơn giản hóa có chủ ý để phục vụ việc học.
 
@@ -39,7 +39,7 @@ sequenceDiagram
     Note over DB,MQ: Saga starts for an order that does not exist.
 ```
 
-*Cách đọc: thời gian chảy từ trên xuống; mũi tên kết thúc bằng `x` là bước không bao giờ hoàn tất. Cả hai thứ tự đều khiến database và broker mâu thuẫn nhau.*
+*Cách đọc: thời gian chảy từ trên xuống; mũi tên kết thúc bằng `x` biểu thị bước bị gián đoạn. Dù thực hiện theo thứ tự nào, database và broker cuối cùng cũng có thể không nhất quán.*
 
 Bọc lệnh publish trong `try/catch` không sửa được điều này. Process có thể bị kill, mạng có thể đứt, hoặc broker có thể đang sập đúng vào khoảnh khắc giữa hai lần ghi.
 
@@ -67,9 +67,9 @@ sequenceDiagram
     R->>DB: mark delivered
 ```
 
-*Cách đọc: thời điểm duy nhất đơn hàng và event của nó được ghi là lệnh COMMIT duy nhất. Mọi thứ bên dưới response 201 xảy ra sau đó và có thể được thử lại.*
+*Cách đọc: đơn hàng và event chỉ được ghi nhận cùng lúc khi transaction được commit. Mọi bước bên dưới response 201 xảy ra sau đó và có thể được thử lại.*
 
-Vì việc giao được thử lại cho đến khi thành công, một thông điệp có thể được giao nhiều hơn một lần (ví dụ, relay publish xong rồi sập trước khi đánh dấu dòng là đã giao). Điều này gọi là at-least-once delivery (giao ít nhất một lần). Phía nhận xử lý các bản trùng bằng hình ảnh phản chiếu của outbox: inbox (hộp thư đến: bảng ghi nhớ thông điệp đã xử lý), được mô tả trong phần thuật toán bên dưới.
+Vì việc giao được thử lại cho đến khi thành công, một thông điệp có thể được giao nhiều hơn một lần (ví dụ, relay publish xong rồi sập trước khi đánh dấu dòng là đã giao). Điều này gọi là at-least-once delivery (giao ít nhất một lần). Phía nhận xử lý các bản trùng bằng cơ chế bổ sung cho outbox: inbox (hộp thư đến, bảng ghi nhớ các thông điệp đã xử lý), được mô tả trong phần thuật toán bên dưới.
 
 ## Đi qua mã nguồn
 
@@ -186,7 +186,7 @@ Phần còn lại của khối `AddMassTransit` (heartbeat của Rabbit, `UseMes
 
 Consumer tìm đơn hàng theo `CorrelationId` (đó là lý do cột này có unique index, xem đoạn trích `OrderDbContext` bên dưới), đặt trạng thái, rồi lưu. [OrderCancelledConsumer.cs](../../../src/SimpleStore.Order.API/Consumers/OrderCancelledConsumer.cs) giống hệt ngoại trừ `OrderStatus.Cancelled` và một metric được gắn tag lý do hủy.
 
-`ConfigureEndpoints(ctx)` tạo một queue cho mỗi consumer, và vì EF outbox đã được đăng ký, các consumer đó được bọc bằng inbox. Comment trong code của `OrderConfirmedConsumer` nói rõ điều này: "The MassTransit EF inbox makes the consume idempotent."
+`ConfigureEndpoints(ctx)` tạo một queue cho mỗi consumer. Vì EF outbox đã được đăng ký, MassTransit áp dụng cơ chế inbox cho các consumer này. Comment trong code của `OrderConfirmedConsumer` nói rõ điều đó: "The MassTransit EF inbox makes the consume idempotent."
 
 ### 7. Trạng thái đơn hàng (Order status)
 
@@ -262,7 +262,7 @@ Outbox cộng inbox cho ta xử lý "gần như chính xác một lần": việc
 - **Sập sau `COMMIT`, trước khi giao.** Đơn hàng và dòng outbox đã tồn tại. Sau khi khởi động lại, delivery service gửi event đi. Đơn hàng chỉ nằm ở `Pending` lâu hơn một chút. Đây chính xác là trường hợp mà outbox được tạo ra để xử lý.
 - **Giao trùng.** Inbox của consumer nhận sẽ lọc nó. Các consumer không có DbContext (như Cart.API) không có inbox và phải được viết sao cho idempotent; xem [Chương 4](04-catalog-and-cart.md).
 - **RabbitMQ sập.** Vẫn đặt được đơn hàng, vì `CreateOrderAsync` chỉ nói chuyện với Postgres. Các event dồn lại trong `OutboxMessage` và được xả đi khi broker trở lại.
-- **Consumer không tìm thấy đơn hàng.** Cả hai consumer ghi một warning và return, điều này được tính là consume thành công; thông điệp không được retry và việc đổi trạng thái bị bỏ qua một cách âm thầm.
+- **Consumer không tìm thấy đơn hàng.** Cả hai consumer ghi warning rồi return. Việc xử lý message được xem là thành công nên message không được thử lại, còn trạng thái đơn hàng không thay đổi.
 - **Một consumer ném exception.** `UseMessageRetry` thử lại tối đa 5 lần với back-off tăng theo cấp số nhân, sau đó MassTransit chuyển thông điệp vào một queue `_error` để người vận hành xử lý.
 - **Trạng thái không được bảo vệ.** Vì các lần chuyển trạng thái không được ép buộc, một `OrderCancelledEventV1` đến muộn sẽ ghi đè một đơn hàng `Delivered`, và admin có thể đặt bất kỳ trạng thái nào. Các hệ thống thực tế bảo vệ các lần chuyển (ví dụ "chỉ `Pending` mới được chuyển thành `Confirmed`").
 - **Giá được tin cậy.** Như đã mô tả ở trên, một caller gọi thẳng API có thể tự chọn `UnitPrice`.
@@ -277,7 +277,7 @@ Outbox cộng inbox cho ta xử lý "gần như chính xác một lần": việc
    - `SELECT "SequenceNumber", "MessageType", "SentTime" FROM "OutboxMessage" ORDER BY "SequenceNumber" DESC;`
    - `SELECT "MessageId", "ConsumerId", "Received", "Consumed" FROM "InboxState" ORDER BY "Id" DESC;`
 
-   Làm mới truy vấn đơn hàng sau vài giây: `Status` chuyển sang `Confirmed` hoặc `Cancelled` (cái nào phụ thuộc vào số dư ví, xem [Chương 8](08-payment-and-compensation.md)). MassTransit xóa các dòng outbox đã giao theo thời gian, nên bảng outbox có thể trông trống; các dòng `InboxState` (mỗi dòng ứng với một `OrderConfirmed`/`OrderCancelled` đã consume) là dấu vết nhìn thấy được của inbox đang làm việc.
+   Làm mới truy vấn đơn hàng sau vài giây: `Status` chuyển sang `Confirmed` hoặc `Cancelled` (tùy số dư ví, xem [Chương 8](08-payment-and-compensation.md)). MassTransit xóa các dòng outbox đã giao theo thời gian, nên bảng outbox có thể trông trống; các dòng `InboxState` (mỗi dòng ứng với một `OrderConfirmed`/`OrderCancelled` đã consume) cho thấy inbox đã xử lý message.
 4. Trong tab **Traces** của dashboard, tìm trace `POST /api/v1/order/orders` của `order`. Đi theo nó vào lần publish RabbitMQ và tiếp đến service `checkout`. Trường log scope `CorrelationId` (cùng giá trị với dòng trong `Orders`) cho phép bạn lọc log xuyên suốt các service.
 5. Trong **RabbitMQ management** (resource `rabbitmq`), mở tab **Queues**. Bạn sẽ thấy một queue cho mỗi consumer, ví dụ cho `OrderConfirmedConsumer` và `OrderCancelledConsumer`.
 6. Thí nghiệm: dừng resource `rabbitmq` từ dashboard, đặt thêm một đơn hàng, rồi khởi động lại nó. Kết quả mong đợi: đơn hàng được tạo bình thường và hiện `Pending`; dòng `OutboxMessage` đang chờ; khi broker trở lại, event được giao và saga tiếp tục chạy. (Dự đoán từ thiết kế; hãy tự kiểm chứng trên máy của bạn.)

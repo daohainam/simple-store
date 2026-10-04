@@ -2,14 +2,14 @@
 
 > 🇻🇳 Bản tiếng Việt. English version: [09-resilience-and-observability.md](../09-resilience-and-observability.md)
 
-Trong một hệ thống gồm mười chương trình và bốn kho dữ liệu, lúc nào cũng có thứ gì đó bị hỏng thoáng qua: database khởi động lại, kết nối broker bị rớt, container khởi động chậm. Chương này cho bạn thấy các lớp phòng thủ mà SimpleStore dựng quanh những sự cố ngắn đó (retry, circuit breaker, giảm cấp có kiểm soát, health check) và các công cụ nó dùng để nhìn thấy chuyện gì đang xảy ra (trace, metric, log). Hai chủ đề này đi cùng nhau: bạn chỉ có thể tin vào một lần retry nếu bạn thấy được rằng nó đã xảy ra.
+Trong một hệ thống gồm mười service và bốn kho dữ liệu, lúc nào cũng có thể xảy ra sự cố tạm thời: database khởi động lại, kết nối broker bị ngắt, container khởi động chậm. Chương này giới thiệu các lớp phòng vệ SimpleStore sử dụng để xử lý những sự cố ngắn hạn đó (retry, circuit breaker, giảm cấp có kiểm soát, health check) và các công cụ giúp quan sát hoạt động của hệ thống (trace, metric, log). Hai chủ đề này gắn liền với nhau: chỉ có thể tin vào cơ chế retry khi bạn biết nó đã được kích hoạt.
 
 **Bạn sẽ học được**
 
 - Cách EF Core retry (thử lại) các lỗi database tạm thời, và vì sao điều đó buộc transaction phải nằm trong một lớp bọc đặc biệt (`IExecutionStrategy`).
 - Cách MassTransit retry việc xử lý thông điệp bị lỗi, và các thiết lập circuit breaker (cầu dao ngắt mạch) và heartbeat (nhịp tim) làm gì.
 - Cách các service sống sót khi database chưa sẵn sàng lúc khởi động, và cách inventory projector kết nối lại.
-- Cách giỏ hàng giảm cấp khi đọc nhưng lỗi một cách gọn gàng khi ghi lúc Redis ngừng hoạt động.
+- Cách giỏ hàng hoạt động ở chế độ suy giảm có kiểm soát khi đọc, nhưng trả lỗi rõ ràng khi ghi trong lúc Redis ngừng hoạt động.
 - `/health`, `/alive` và `/ready` nghĩa là gì và thẻ `"ready"` hoạt động ra sao.
 - Cách trace, metric và log của OpenTelemetry đến được Aspire dashboard, có những metric tự định nghĩa nào, và cách đọc một trace.
 
@@ -49,7 +49,7 @@ flowchart LR
 
 *Cách đọc: các ô bên trái là những thứ đi sai, các ô bên phải là mã xử lý chúng. Mỗi mũi tên ứng với một mục trong phần "Đi qua mã nguồn".*
 
-Sơ đồ thứ hai cho thấy chính các chương trình đó báo cáo hoạt động của mình ra sao.
+Sơ đồ thứ hai cho thấy các service báo cáo hoạt động của mình như thế nào.
 
 ```mermaid
 flowchart LR
@@ -163,7 +163,7 @@ Các message handler (bộ xử lý thông điệp) lỗi vì cùng những lý 
 | `UseMessageRetry` / `Exponential` | 5 lần retry, khoảng chờ tăng từ khoảng 1 giây lên đến mức trần 30 giây | Nếu một consumer ném exception, MassTransit chạy lại handler ngay trong tiến trình. Khoảng cách chính xác do công thức của MassTransit quyết định. Sau lần retry thứ năm, thông điệp được chuyển sang queue `_error` để người vận hành kiểm tra. |
 | `TrackingPeriod` | 1 phút | Cửa sổ thời gian dùng để đếm các lỗi. |
 | `ActiveThreshold` | 10 | Breaker chỉ đánh giá endpoint khi đã xử lý ít nhất 10 thông điệp trong cửa sổ. |
-| `TripThreshold` | 15 | Phần trăm thông điệp lỗi trong cửa sổ làm breaker mở ra. |
+| `TripThreshold` | 15 | Tỷ lệ thông điệp thất bại trong cửa sổ để kích hoạt breaker. |
 | `ResetInterval` | 5 phút | Thời gian breaker giữ trạng thái mở trước khi cho một thông điệp thử đi qua. |
 
 Lớp retry sửa các trục trặc ngắn; breaker xử lý sự cố kéo dài bằng cách tạm dừng việc tiêu thụ thay vì đốt hết số lần retry cho mọi thông điệp. Chương trình Checkout có một chú thích thêm đáng biết: các saga consumer tự động nhận chính sách retry, và saga repository dùng khóa dòng bi quan (pessimistic row lock) để các thông điệp đồng thời của cùng một saga chạy lần lượt từng cái một (chương 6).
@@ -346,7 +346,7 @@ Cuối cùng, bộ lọc trace của OpenTelemetry trong cùng file loại trừ
 
 ### Phần C - Khả năng quan sát
 
-> **Thuật ngữ mới: observability (khả năng quan sát).** Khả năng hiểu một hệ thống đang chạy đang làm gì từ bên ngoài, dựa trên ba loại tín hiệu. **Log** là các event dạng văn bản. **Metric** là các con số theo thời gian (counter, gauge, histogram). **Trace** theo dõi một request đi qua nhiều chương trình dưới dạng một cây các bước có đo thời gian, gọi là **span**.
+> **Thuật ngữ mới: observability (khả năng quan sát).** Khả năng hiểu một hệ thống đang hoạt động ra sao thông qua ba loại tín hiệu. **Log** là các event dạng văn bản. **Metric** là các con số theo thời gian (counter, gauge, histogram). **Trace** theo dõi một request đi qua nhiều service dưới dạng cây các bước có đo thời gian, gọi là **span**.
 
 > **Thuật ngữ mới: OpenTelemetry (OTel).** Một chuẩn trung lập với nhà cung cấp cùng bộ thư viện để tạo ra ba loại tín hiệu đó. **OTLP** là giao thức dùng để chuyển chúng đến một collector (bộ thu thập); ở đây collector là Aspire dashboard.
 

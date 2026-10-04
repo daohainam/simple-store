@@ -23,7 +23,7 @@ Chỉ riêng việc đọc chương này đã là một bài tập tốt: với 
 - **Ở đâu:** [CreateReservationHandler.cs](../../../src/SimpleStore.Inventory.API/Application/Reservations/CreateReservationHandler.cs)
 - **Chuyện gì xảy ra:** handler khóa các dòng `stock_levels` bằng `SELECT ... FOR UPDATE` rồi kiểm tra lượng hàng có sẵn. Nhưng nó **không** trừ `OnHand`. Việc trừ được làm sau đó, bất đồng bộ, bởi projector sau khi event `StockReservedV1` được đọc lại từ KurrentDB.
 - **Kịch bản lỗi:** hai reservation cho đơn vị hàng cuối cùng đến trước khi projector áp dụng cái đầu tiên. Cả hai đều đọc `OnHand = 1`, cả hai đều qua bước kiểm tra, cả hai đều append `StockReservedV1`. Sau đó projector đẩy `OnHand` xuống `-1` (cột này cho phép giá trị âm).
-- **Vì sao chấp nhận được ở đây:** cách làm này giữ cho phía ghi thuần event-sourced và minh họa eventual consistency (nhất quán cuối cùng). Comment đầu handler và [checkout-saga.md §10.3](../../checkout-saga.md) có ghi lại tình huống tranh chấp này (và §13 phác thảo cách sửa bằng stream riêng cho từng sản phẩm).
+- **Vì sao chấp nhận được ở đây:** cách làm này giữ cho luồng ghi thuần event-sourced và minh họa eventual consistency (tính nhất quán sau cùng). Comment đầu handler và [checkout-saga.md §10.3](../../checkout-saga.md) có ghi lại tình huống tranh chấp này (và §13 phác thảo cách sửa bằng stream riêng cho từng sản phẩm).
 - **Cách sửa cho production:** biến việc reservation thành một quyết định được đưa ra *bên trong aggregate*, dùng một stream mức tồn kho (một aggregate theo từng sản phẩm mà revision của stream đóng vai trò khóa), hoặc trừ một bộ đếm "available to promise" (lượng có thể hứa bán) một cách đồng bộ, trong cùng transaction với bước kiểm tra.
 
 ### 1.2 Payment không có kiểm soát đồng thời ở mức dòng
@@ -49,7 +49,7 @@ Chỉ riêng việc đọc chương này đã là một bài tập tốt: với 
 - **Ở đâu:** [CheckoutSagaStateMachine.cs](../../../src/SimpleStore.Checkout.API/Sagas/CheckoutSagaStateMachine.cs)
 - **Mã nguồn có gì:** mỗi state chỉ xử lý những event mà nó mong đợi. Trong toàn dự án không có `Ignore(...)`, `DuringAny(...)`, `OnUnhandledEvent(...)` hay `OnMissingInstance(...)` nào.
 - **Điều đó có nghĩa là gì:** chuyện gì xảy ra khi, ví dụ, một `StockReserved` đến lúc saga đang ở `AwaitingPayment`, hoặc bất kỳ event nào đến sau khi dòng saga đã bị xóa, là do các mặc định của MassTransit quyết định. *Cần kiểm chứng:* hãy xem hành vi của phiên bản MassTransit bạn dùng (kết quả thường gặp của một event không được xử lý là một fault đi qua retry policy và kết thúc ở hàng đợi `_error`).
-- **Lưu ý:** [checkout-saga.md §9](../../checkout-saga.md) nói rằng những thông điệp như vậy bị "dropped by a state-machine guard" (bị loại bỏ bởi một chốt chặn của state machine). Phát biểu đó không được cấu hình trong mã nguồn hậu thuẫn — hãy coi mã nguồn là sự thật.
+- **Lưu ý:** [checkout-saga.md §9](../../checkout-saga.md) nói rằng những thông điệp như vậy bị "dropped by a state-machine guard" (bị loại bỏ bởi một chốt chặn của state machine). Mã nguồn không có cấu hình hỗ trợ cho khẳng định đó — hãy lấy mã nguồn làm chuẩn.
 - **Cách sửa cho production:** khai báo hành vi tường minh cho mọi cặp `(state, event)` mà bạn có thể hợp lệ nhận muộn, và bổ sung xử lý `OnMissingInstance`.
 
 ### 2.2 `PaymentSucceeded` đến muộn sau khi payment timeout thì không có đường hoàn tiền
@@ -60,7 +60,7 @@ Chỉ riêng việc đọc chương này đã là một bài tập tốt: với 
 
 ### 2.3 Có thể tạo reservation cho một đơn hàng đã bị hủy
 
-Nếu RabbitMQ ngừng hoạt động đủ lâu để timeout 30 s của bước *stock* kích hoạt, saga sẽ hủy đơn hàng. Khi broker hồi phục, yêu cầu reserve (đã nằm trong outbox) vẫn được chuyển đi và Inventory giữ hàng cho một đơn hàng đã bị hủy. Vì reservation đó không bao giờ tới bước thanh toán, nên không có gì nhả nó ra. [checkout-saga.md §11.3](../../checkout-saga.md) gọi đây là một cạnh duy nhất không được bù trừ.
+Nếu RabbitMQ ngừng hoạt động đủ lâu để timeout 30 s của bước *stock* kích hoạt, saga sẽ hủy đơn hàng. Khi broker hồi phục, yêu cầu reserve (đã nằm trong outbox) vẫn được chuyển đi và Inventory giữ hàng cho một đơn hàng đã bị hủy. Vì reservation đó không bao giờ tới bước thanh toán nên không có gì giải phóng nó. [checkout-saga.md §11.3](../../checkout-saga.md) mô tả đây là trường hợp duy nhất trong luồng chưa có bước compensation.
 
 ### 2.4 Timeout chỉ chạy đúng với một replica
 
@@ -92,7 +92,7 @@ Nếu RabbitMQ ngừng hoạt động đủ lâu để timeout 30 s của bướ
 ### 4.1 Việc dùng lại refresh token bị từ chối nhưng không được coi là một cuộc tấn công
 
 - **Ở đâu:** [RefreshTokenService.cs](../../../src/SimpleStore.Identity.API/Services/RefreshTokenService.cs)
-- **Chuyện gì xảy ra:** token được xoay vòng sau mỗi lần dùng và token cũ bị thu hồi. Xuất trình một token cũ chỉ đơn giản là thất bại (401). Cột `ReplacedByTokenHash` được ghi nhưng không bao giờ được dùng để thu hồi phần còn lại của họ token (token family).
+- **Chuyện gì xảy ra:** token được xoay vòng sau mỗi lần dùng và token cũ bị thu hồi. Xuất trình một token cũ chỉ đơn giản là thất bại (401). Cột `ReplacedByTokenHash` được ghi nhưng không bao giờ được dùng để thu hồi các token còn lại trong cùng một chuỗi refresh token.
 - **Cách sửa cho production:** khi một token đã bị thu hồi được dùng lại, hãy thu hồi mọi token con cháu của người dùng đó (phát hiện việc dùng lại refresh token).
 
 ### 4.2 Web và Admin lưu session trong bộ nhớ của process
@@ -118,13 +118,13 @@ Các user được seed là `admin@simplestore.local` và `demo@simplestore.loca
 
 Projector subscribe `$all` bằng một consumer duy nhất. Chạy hai replica Inventory sẽ khiến mỗi event bị áp dụng hai lần (các chốt idempotency theo từng event giúp nó vẫn *đúng*, nhưng lãng phí). Cách sửa: dùng persistent subscription của KurrentDB với một consumer group, hoặc leader election (bầu chọn leader).
 
-### 5.2 Một lệnh cancel cho reservation không biết được bỏ qua, không bao giờ retry
+### 5.2 Yêu cầu hủy reservation không tồn tại bị bỏ qua và không được thử lại
 
 `ApplyStockReservationCancelledAsync` không làm gì khi dòng read `reservations` bị thiếu hoặc không ở trạng thái `Active`. Vì `$all` được sắp thứ tự chặt chẽ và saga chỉ cancel sau khi nhận được `StockReservedEventV1`, chốt chặn này chỉ có ý nghĩa nếu read model bị xóa một phần hoặc bị chỉnh sửa. Đây là một phép kiểm tra phòng thủ đáng để hiểu, không phải một tình huống tranh chấp có thật.
 
 ### 5.3 Back-off khi kết nối lại không được đặt lại sau khi có tiến triển
 
-Trong `InventoryProjectionService`, back-off 1 s → 30 s chỉ được đặt lại khi vòng lặp subscription kết thúc bình thường. Sau một thời gian dài hoạt động khỏe mạnh, lần lỗi tiếp theo vẫn giữ độ trễ trước đó (có thể là 30 s).
+Trong `InventoryProjectionService`, khoảng chờ tăng dần từ 1 đến 30 giây chỉ được đặt lại khi vòng lặp subscription kết thúc bình thường. Sau một thời gian dài hoạt động ổn định, lần lỗi tiếp theo vẫn giữ khoảng chờ trước đó (có thể là 30 giây).
 
 ### 5.4 "Commit" reservation chưa được cài đặt
 
@@ -184,7 +184,7 @@ Một bài test bus in-memory trên 9.2.1 đã thất bại với thông báo y�
 
 ### 8.5 Một event lỗi vĩnh viễn làm projector đứng yên — *từ việc đọc mã nguồn*
 
-Khi có exception, vòng lặp ngoài nạp lại cùng checkpoint và thử lại cùng event đó, tối đa mỗi 30 s một lần, nên không có gì sau nó được projection cho tới khi nó được sửa. Một chính sách dead-letter hoặc "bỏ qua và cảnh báo" là cách khắc phục thường dùng.
+Khi có exception, vòng lặp ngoài nạp lại cùng checkpoint và thử lại cùng event đó, tối đa mỗi 30 giây một lần. Vì vậy, các event sau đó không được áp dụng vào read model cho đến khi event lỗi được xử lý. Một chính sách dead-letter hoặc "bỏ qua và cảnh báo" là cách khắc phục thường dùng.
 
 ### 8.6 Những điều bất ngờ nhỏ hơn trong các ứng dụng web
 

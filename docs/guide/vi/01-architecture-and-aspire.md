@@ -2,7 +2,7 @@
 
 > 🇻🇳 Bản tiếng Việt. English version: [01-architecture-and-aspire.md](../01-architecture-and-aspire.md)
 
-SimpleStore là một cửa hàng trực tuyến được chia thành mười chương trình nhỏ chạy cùng nhau. Chương này cho bạn biết các chương trình đó là gì, chúng phụ thuộc vào những database và broker (bộ trung chuyển thông điệp) nào, và làm thế nào một file duy nhất, `AppHost.cs`, khởi động mọi thứ đúng thứ tự và chỉ cho từng chương trình biết tìm các chương trình khác ở đâu. Hãy đọc chương này trước: mọi chương sau đều giả định bạn đã nắm bản đồ này.
+SimpleStore là một cửa hàng trực tuyến gồm mười service nhỏ hoạt động cùng nhau. Chương này giới thiệu các service đó, những database và broker (bộ trung chuyển thông điệp) chúng sử dụng, và cách `AppHost.cs` khởi động mọi thứ đúng thứ tự, đồng thời giúp từng service tìm thấy các service khác. Hãy đọc chương này trước: mọi chương sau đều giả định bạn đã nắm được kiến trúc tổng thể.
 
 **Bạn sẽ học được**
 
@@ -18,19 +18,19 @@ SimpleStore là một cửa hàng trực tuyến được chia thành mười ch
 
 Một cửa hàng cần danh mục sản phẩm, giỏ hàng, đơn hàng, tồn kho, thanh toán và tài khoản người dùng. Trong một **monolith** (ứng dụng nguyên khối), tất cả nằm trong một chương trình và một database. Cách này dễ bắt đầu, nhưng mỗi thay đổi đều phải phát hành cả chương trình, và một tính năng chậm có thể kéo cả hệ thống chậm theo.
 
-Tách thành **microservice** (các chương trình nhỏ, mỗi cái làm một việc) giải quyết được một phần, nhưng lại đẻ ra câu hỏi mới:
+Tách thành **microservice** (các service nhỏ, mỗi service đảm nhận một việc) giải quyết được một phần, nhưng lại đặt ra những câu hỏi mới:
 
-- Làm sao khởi động mười chương trình, ba loại database và một message broker trên laptop chỉ bằng một lệnh?
+- Làm sao khởi động mười service, ba loại database và một message broker trên máy tính chỉ bằng một lệnh?
 - Làm sao service Order biết địa chỉ của service Payment khi các port được chọn ngẫu nhiên?
 - Làm sao ngăn các service âm thầm đọc bảng của nhau?
 
-> **Thuật ngữ mới: microservice.** Một chương trình nhỏ sở hữu một năng lực nghiệp vụ (ví dụ "đơn hàng") cùng dữ liệu riêng của nó. Các chương trình khác nói chuyện với nó qua HTTP hoặc qua thông điệp (message), không bao giờ mở trực tiếp database của nó.
+> **Thuật ngữ mới: microservice.** Một service nhỏ đảm nhận một năng lực nghiệp vụ (ví dụ "đơn hàng") và sở hữu dữ liệu riêng. Các service khác giao tiếp với nó qua HTTP hoặc message, chứ không truy cập trực tiếp vào database của nó.
 
-> **Thuật ngữ mới: .NET Aspire.** Bộ công cụ .NET để mô tả một ứng dụng nhiều chương trình bằng C#. Một project "AppHost" liệt kê mọi chương trình và mọi phụ thuộc (database, cache, broker). Khi bạn chạy nó, Aspire khởi động chúng, nối connection string và địa chỉ, rồi mở một dashboard có log và trace.
+> **Thuật ngữ mới: .NET Aspire.** Bộ công cụ .NET để mô tả một ứng dụng gồm nhiều service bằng C#. Project "AppHost" liệt kê các service và dependency (database, cache, broker). Khi chạy AppHost, Aspire khởi động chúng, cung cấp connection string và địa chỉ, rồi mở dashboard hiển thị log và trace.
 
 ## Bức tranh tổng thể
 
-SimpleStore có hai tầng: trình duyệt nói chuyện với hai giao diện người dùng, các giao diện nói chuyện với một gateway (cổng vào), và gateway chuyển tiếp yêu cầu đến các backend HTTP. Service checkout hoàn toàn không có giao diện HTTP; nó chỉ phản ứng với các thông điệp.
+SimpleStore có hai tầng: trình duyệt giao tiếp với hai ứng dụng web, các ứng dụng này gọi đến gateway (cổng vào), rồi gateway chuyển tiếp request đến các backend HTTP. Checkout không cung cấp API HTTP; service này chỉ xử lý các thông điệp.
 
 ```mermaid
 flowchart LR
@@ -90,7 +90,7 @@ Còn bốn project nữa không phải là service:
 
 - `SimpleStore.Contracts` - các record event đi qua RabbitMQ ([chương 10](10-contracts-and-versioning.md)).
 - `SimpleStore.<Service>.API.Client` - một thư viện client nhỏ cho mỗi backend (các DTO cộng với một `HttpClient` có kiểu).
-- `SimpleStore.ServiceDefaults` - mã khởi động dùng chung cho mọi chương trình (xem "Đi qua mã nguồn", bước 7).
+- `SimpleStore.ServiceDefaults` - mã khởi động dùng chung cho mọi service (xem "Đi qua mã nguồn", bước 7).
 - `SimpleStore.AppHost` - bộ điều phối (orchestrator) Aspire được mô tả ngay sau đây.
 
 ---
@@ -226,9 +226,9 @@ Hãy xem cách Web và Admin tạo HTTP client cho service Order, trong [OrderAp
 
 `https+http://gateway` không phải một URL thật. Tên host `gateway` là tên resource trong `AppHost.cs`. Scheme `https+http` nghĩa là "ưu tiên HTTPS, nếu không được thì dùng HTTP". Khi chạy, service discovery của Aspire thay phần giữ chỗ này bằng một địa chỉ thật.
 
-> **Thuật ngữ mới: service discovery (khám phá service).** Một cơ chế tra cứu biến một cái tên logic ("gateway") thành địa chỉ và port hiện tại của service đó. Nó loại bỏ các URL viết cứng trong code, điều này quan trọng vì Aspire chọn port một cách động.
+> **Thuật ngữ mới: service discovery (khám phá service).** Cơ chế này phân giải tên service ("gateway") thành địa chỉ và port hiện tại. Nhờ đó, code không cần chứa URL cố định; Aspire có thể gán port động.
 
-### Bước 7 - `AddServiceDefaults()` thêm gì vào mọi chương trình
+### Bước 7 - `AddServiceDefaults()` bổ sung gì cho mỗi service
 
 Mọi service đều bắt đầu bằng `builder.AddServiceDefaults()`, được định nghĩa trong [Extensions.cs](../../../src/SimpleStore.ServiceDefaults/Extensions.cs):
 
@@ -306,7 +306,7 @@ Bước 2 là hành vi của Aspire, không phải mã trong repository này. B�
 - **Khóa không phải base64 hợp lệ.** Các service gọi `Convert.FromBase64String` trên `Jwt:Key`, nên một khóa dạng văn bản thuần sẽ lỗi lúc khởi động hoặc ở lần kiểm tra token đầu tiên.
 - **Gõ sai tên.** `GetConnectionString("catalogdb")` không trả về gì nếu resource trong AppHost được đặt tên khác. Tên resource là sợi dây nối duy nhất.
 - **Chạy một project riêng lẻ.** `dotnet run --project src/SimpleStore.Order.API` chỉ chạy được nếu bạn tự cung cấp connection string và `Jwt__*`. Bình thường hãy để AppHost lo việc đó.
-- **Soft reference có thể bị treo.** Xóa một sản phẩm trong Catalog không đụng đến các order item cũ. Đây là cái giá của các database độc lập.
+- **Soft reference có thể trở thành tham chiếu mồ côi.** Xóa một sản phẩm trong Catalog không ảnh hưởng đến các order item cũ. Đây là cái giá của việc mỗi service sở hữu database riêng.
 - **Mất dữ liệu.** Ở đây chỉ KurrentDB có volume được đặt tên. Tạo lại container Postgres sẽ xóa sạch cả sáu database.
 
 ## Tự thực hành
@@ -323,15 +323,15 @@ Bước 2 là hành vi của Aspire, không phải mã trong repository này. B�
 4. Bấm vào `gateway`, mở phần chi tiết và xem mục environment/configuration. Bạn sẽ thấy các mục được chèn vào cho sáu service mà nó tham chiếu, và các giá trị `Jwt__*` (khóa được che đi).
 5. Bấm vào `checkout` và xác nhận rằng không có mục `Jwt__*` nào và không có HTTP endpoint nào.
 6. Mở pgweb (liên kết nằm trên resource `postgres`). Chọn `orderdb` và chạy `select "Id", "UserId" from "Orders" limit 5;`. Sau đó chọn `identitydb`. Bảng `AspNetUsers` chỉ có ở đó; database của order không có khóa ngoại nào đến nó.
-7. Mở liên kết quản lý RabbitMQ và xem tab **Queues**. Các queue chỉ xuất hiện sau khi các service kết nối; bạn sẽ thấy chúng đầy dần lên ở các chương sau.
+7. Mở liên kết quản lý RabbitMQ và xem tab **Queues**. Các queue chỉ xuất hiện sau khi các service kết nối; chúng sẽ được giới thiệu trong những chương sau.
 
 ## Những điều cần nhớ
 
-- Một `AppHost.cs` mô tả cả hệ thống: hạ tầng, các chương trình, và ai phụ thuộc vào ai.
+- Một `AppHost.cs` mô tả cả hệ thống: hạ tầng, các service và quan hệ phụ thuộc giữa chúng.
 - `WithReference` chèn địa chỉ và connection string; `WaitFor` điều khiển thứ tự khởi động; `WithEnvironment` đặt các setting đơn giản như `Jwt__Key`.
 - Mỗi service sở hữu đúng một bộ dữ liệu. Các liên kết giữa các database là soft reference và được giải quyết trong mã ứng dụng.
 - Các tên như `"orderdb"` và `https+http://gateway` là chất keo kết dính; chúng đến từ `AppHost.cs`.
-- `AddServiceDefaults()` cho mọi chương trình telemetry, health check, service discovery và khả năng chịu lỗi cho HTTP.
+- `AddServiceDefaults()` bổ sung telemetry, health check, service discovery và khả năng chịu lỗi HTTP cho mọi service.
 - Checkout cố ý không có HTTP và không có JWT; nó hoàn toàn được điều khiển bằng thông điệp.
 
 ## Chương tiếp theo
